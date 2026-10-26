@@ -88,3 +88,12 @@ if(TTO_BUILD_TESTS)
   include(GoogleTest)
   gtest_discover_tests(tto_tests)
 endif()
+
+if(TTO_BUILD_TESTS AND TTO_BUILD_GAME)
+  foreach(s talim_playthrough talim_pass)
+    add_test(NAME playthrough_${s}
+      COMMAND ${CMAKE_SOURCE_DIR}/tests/run_playthrough.sh $<TARGET_FILE:toyota-trafik>
+              ${CMAKE_SOURCE_DIR}/tests/scripts/${s}.txt ${CMAKE_BINARY_DIR}/playthrough/${s})
+    set_tests_properties(playthrough_${s} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800)
+  endforeach()
+endif()

@@ -118,6 +118,7 @@ double App::speech(const std::string& dir, const std::string& file) {
         }
     }
     audio_.play(c);
+    log_info("speech {}\\{}", dir, file);
     const double bps = static_cast<double>(c->spec.freq) * c->spec.channels * SDL_AUDIO_BYTESIZE(c->spec.format);
     return bps > 0 ? static_cast<double>(c->pcm.size()) / bps : 0;
 }
