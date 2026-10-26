@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
-import sorubank  # noqa: E402
+import sorubank  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 CTL = str(Path(__file__).resolve().parent / "tto_ctl.sh")
 CROP = (228, 462, 560, 290)
@@ -39,7 +39,11 @@ def ocr_lines(png):
 
 
 def main():
-    qs = [q for q in sorubank.parse(open(sys.argv[1], "rb").read()) if q["category"] == "Ehliyet"]
+    try:
+        data = Path(sys.argv[1]).read_bytes()
+    except OSError as e:
+        sys.exit(f"cannot read {sys.argv[1]}: {e}")
+    qs = [q for q in sorubank.parse(data) if q["category"] == "Ehliyet"]
     out = Path(sys.argv[3])
     for n in range(int(sys.argv[2])):
         full, crop = out / f"quiz_{n}.png", out / f"quiz_{n}_c.png"
@@ -49,7 +53,7 @@ def main():
         lines = ocr_lines(str(crop))
         text = " ".join(t for t, _ in lines)
         q = max(qs, key=lambda q: difflib.SequenceMatcher(None, norm(q["question"]), norm(text[:len(q["question"]) + 20])).ratio())
-        best = max(lines, key=lambda l: difflib.SequenceMatcher(None, norm(q["answers"][0]), norm(l[0].split(")", 1)[-1])).ratio())
+        best = max(lines, key=lambda ln: difflib.SequenceMatcher(None, norm(q["answers"][0]), norm(ln[0].split(")", 1)[-1])).ratio())
         bx = best[1]
         cx, cy = x0 + (bx[0] + bx[2]) // 4, y0 + (bx[1] + bx[3]) // 4
         print(f"{n}: Q{q['id']} -> '{q['answers'][0]}' via OCR '{best[0]}' click {cx},{cy}", flush=True)

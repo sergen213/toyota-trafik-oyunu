@@ -30,7 +30,14 @@ TTO_GAME_DIR="/path/to/Toyota Trafik Oyunu v2" xvfb-run -a -s "-screen 0 1280x10
 |---|---|
 | `talim_playthrough` | title → help → new driver → licence quiz (8 correct) → map select → loader → Eğitim Sahası → drive → sign question answered (+40) → 240 s time-out → report → ENTER → map continues |
 | `talim_pass` | same start, then autopilot driving with sign answers until ≥ 150 points → F4 → "Tebrikler" menu question → unlock map 2 → report → Kasaba loads |
+| `playlist_editor` | main menu → Müzik Listesi → add/reorder/remove tracks → Kaydet → `<save>/playlist.m3u` |
 | `map1`..`map5` | each map loads and drives 8 s via autopilot |
+| `map3_gl` | map 3 on the OpenGL fallback (`--renderer gl`) |
+| `talim_fsr_framegen` | `talim_playthrough` with `--fsr balanced --framegen` (Vulkan, ray tracing on) |
+
+`tto_tests` also runs `World.*` (train/crossings, spawners, sirens, take-over on the shipped `maps.json`, no game
+files) and `Smd.PoseSkinsVerticesByBoneName`. The Vulkan paths were run clean under
+`VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` (talim playthrough with RT, FSR and frame generation).
 
 Script commands are documented at the top of `App::load_script` (`src/app/app.cpp`). `autodrive` only presses
 the arrow keys and drives through the normal physics and rules.

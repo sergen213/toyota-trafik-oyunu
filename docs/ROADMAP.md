@@ -13,27 +13,28 @@ Milestones from goal.txt §14. Evidence is in brackets.
 | 7 | Playable gameplay | **Done for Eğitim Sahası** [playthrough tests: quiz → map 1 → pass with 150+ points → report → map 2] |
 | 8 | Complete and preserve | **Partial**: see gaps below; no public release yet (needs owner approval) |
 
-## Known gaps (not implemented)
+## Implemented since 0.1.0
 
-Evidence for most of these exists in `re/WORLD.md` / `re/RULES.md`; they are listed by priority.
+Train and level crossings, school bus, emergency vehicles, wrong parking, AI spawner/culling (city maps and Otoban),
+right-of-way and hospital-horn rules, pedestrian walk animation / tint / code-5 question, cutscene videos (FFmpeg),
+music-list editor, joystick mode, billboards, water sound, wheels, Yaris driver poses, key panel on map 4, `t`/`y`,
+AI turn bias in the lane function. Renderer: Vulkan backend with ray-traced shadows, FSR 3.1.4 upscaling and frame
+generation; OpenGL kept as fallback.
 
-1. Pedestrians: **basic version done** (up to 10 per map on maps 2–4, original `Insanlar\*.smd` models drawn in the
-   reference pose, sidewalk/crossing walking, obey lights, wait for cars on crossings, hit −17, "Dikkat Yayaya Öncelik
-   Tanı"). Missing: skeletal walk animation (`yuru.smd`), clothes tint, the pedestrian red-light violator question
-   (code 5; its trigger `FUN_00539c78` is an open RE question), exact spawner and walk-speed units ([G] 4/3 m/s).
-2. Map-specific actors: train and level crossing (map 3, `DingDing`), school bus stop arms and the overtaking rule
-   (−7), ambulance/police sirens, wrong-parking violator (code 3; needs a car re-placement).
-3. Right-of-way rule (−4) and the hospital-zone horn rule (−5).
-4. Cutscene videos (`Video/*.mpg`, intro `cancan.avi`) — needs an FFmpeg-based player; speech clips do play.
-5. Exact AI lane/turn bias, tailgating distance gate (6 m chosen) and green-light credit geometry are marked [L]/[G]
-   in the RE notes.
-6. Camera: only the chase camera was observed under Wine at map start, so the native port starts in mode 1. Code
-   reading says mode 3 (interior) — unresolved.
-7. Music-list editor (TFormDiger), joystick mode, online score links (the sites are defunct; the key is shown in
-   the İletişim popup).
-8. Handling has not been compared frame by frame with the original.
-9. Four static collision boxes on map 3 whose size the emulator did not recover are skipped.
+## Remaining gaps and guesses
+
+Marked [G] in code comments; none blocks play.
+
+1. Right of way is a simplified right-hand rule (the full decision table of `0x5390d0` is only partly decoded).
+2. Level-crossing post/boom placement, train start position (beyond node 22), school-bus `Dur` sign position,
+   billboard panel offset and water-sound axis are not recovered exactly.
+3. Emergency vehicles always run with the siren on (the switch-on site was not found).
+4. The city spawner uses distance bands instead of the original camera-visibility test.
+5. Interior camera (mode 3) offsets put the Yaris driver outside the field of view; mode 3 vs 1 at start unresolved.
+6. Cutscene video plays continuously while its clips play (the original restarts the clip position per clip).
+7. Handling has not been compared frame by frame with the original; four map-3 static boxes are still skipped.
+8. Online score links open the defunct ToyotaSA URLs (the key is shown in the map 4 panel and the İletişim popup).
 
 ## Next concrete action
 
-Map 3 train and level crossing (`re/WORLD.md` §5.1), then pedestrian walk animation.
+Runtime comparison against the Wine oracle for the [G] placements (crossing, bus sign, billboards).

@@ -11,6 +11,7 @@
   and never modifies, uploads or downloads game files.
 - Reverse engineering was performed on a legitimately obtained copy for preservation and interoperability.
   No DRM, activation or licence check exists in the game (see `FAILURE_ANALYSIS.md`), so none was bypassed.
-- Third-party code: ODE (BSD, `third_party/ode-LICENSE-BSD.TXT`) when built from the pinned tarball; system
-  libraries (SDL3, SDL3_ttf, GLEW, mpg123, stb, GoogleTest) under their own licences.
+- Third-party code: ODE (BSD, `third_party/ode-LICENSE-BSD.TXT`) when built from the pinned tarball; AMD FidelityFX
+  SDK v1.1.4 subset (MIT, `third_party/FidelityFX-SDK/LICENSE.txt`, provenance in `PROVENANCE.txt`); system
+  libraries (SDL3, SDL3_ttf, GLEW, Vulkan loader, FFmpeg, mpg123, stb, GoogleTest) under their own licences.
 - Before any public release, re-run the tracked-file check in `TESTING.md` and keep releases free of game data.

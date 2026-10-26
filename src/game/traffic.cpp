@@ -42,18 +42,53 @@ Sim::Sim(const MapData& map, const std::vector<CarParams>& carParams, const std:
         c.color = carColors.size() > static_cast<std::size_t>(i) ? carColors[static_cast<std::size_t>(i)] : glm::vec3(0.7f);
     }
     playerIdx_ = kPlayerType - 1;
+    // All 16 TAraba objects exist for the whole map (factory 0x4fe0f0); idle ones are parked far away.
+    for (int i = 0; i < 16; ++i) {
+        Car& c = cars_[static_cast<std::size_t>(i)];
+        c.body = std::make_unique<OdeCar>(*phys_, carParams.at(static_cast<std::size_t>(i)),
+                                          glm::vec3(static_cast<float>(i) * 20.0f, -500.0f, -3000.0f), glm::vec3(0, 0, 1));
+        c.body->set_enabled(false);
+    }
     int activeAi = 0;
     for (const auto& s : map_.cars) {
         if (s.car < 0 || s.car >= 16) continue;
         Car& c = cars_[static_cast<std::size_t>(s.car)];
         if (!c.player && activeAi >= cfg_.activeCarLimit) continue;
-        const CarParams& p = carParams.at(static_cast<std::size_t>(s.car));
-        c.body = std::make_unique<OdeCar>(*phys_, p, glm::vec3(0, kRideHeight, 0), glm::vec3(0, 0, 1));
         // AI cruise speed = Random(50)+25 at the Talim placement (0x52d430).
         const float cruise = c.player ? s.speed : static_cast<float>(std::uniform_int_distribution<int>(0, 49)(rng_) + 25);
+        activate(c);
         place(c, s.a, s.b, s.dist, cruise);
-        c.active = true;
         if (!c.player) ++activeAi;
+    }
+    // Hospital zones: the roads carrying a TLHastahane sign (flag +0x148).
+    for (const auto& sg : map_.signs) {
+        if (sg.kind != "TLHastahane") continue;
+        int road = -1;
+        if (sg.onConnection && sg.on >= 0 && sg.on < static_cast<int>(map_.connKind.size()) && map_.connKind[static_cast<std::size_t>(sg.on)] == 0)
+            road = map_.connIndex[static_cast<std::size_t>(sg.on)];
+        else if (!sg.onConnection)
+            road = map_.road_between(sg.on, sg.toward);
+        if (road >= 0) hospitalRoads_.push_back(road);
+    }
+    // Map 3 railway: a light group without phase strings; the train drives it (0x508afc).
+    if (map_.index == 3) {
+        int railGroup = -1;
+        for (std::size_t g = 0; g < map_.lightGroups.size(); ++g)
+            if (map_.lightGroups[g].phases.empty()) railGroup = static_cast<int>(g);
+        for (std::size_t i = 0; i < map_.lights.size() && railGroup >= 0; ++i) {
+            const auto& L = map_.lights[i];
+            if (L.group != railGroup || map_.road_between(L.on, L.toward) < 0) continue;  // vehicle approaches only
+            const auto& rd = map_.roads[static_cast<std::size_t>(map_.road_between(L.on, L.toward))];
+            if (!rd.aToB && !rd.bToA) continue;
+            LevelCrossing x;
+            x.light = static_cast<int>(i);
+            const glm::vec3 N = node(L.on), f = glm::normalize(flat(N - node(L.toward)));
+            x.pos = N - f * 4.5f + right_of(f) * 3.3f;  // post on the kerb of the approach lane [G]
+            x.facing = -f;
+            crossings_.push_back(x);
+        }
+        hasTrain_ = !crossings_.empty() && map_.nodes.size() > 22;
+        if (hasTrain_) train_.x = node(22).x;
     }
     phys_->onDynamicContact = [this](dBodyID a, dBodyID b, float dv) {
         Car& p = player();
@@ -75,14 +110,48 @@ Sim::Sim(const MapData& map, const std::vector<CarParams>& carParams, const std:
     if (!map_.walks.empty()) {
         peds_.resize(10);
         for (std::size_t i = 0; i < peds_.size(); ++i) {
-            peds_[i].model = static_cast<int>(i * 3 % 15);
-            place_pedestrian(peds_[i]);
+            Pedestrian& p = peds_[i];
+            p.model = static_cast<int>(i * 3 % 15);
+            // Clothes tint: Insanlar-<type>-Renkler entry [idx-1], else a random entry (0x5467af).
+            const auto type = static_cast<std::size_t>(p.model / 5);
+            if (type < cfg_.pedColors.size() && !cfg_.pedColors[type].empty()) {
+                const auto& list = cfg_.pedColors[type];
+                const auto idx = static_cast<std::size_t>(p.model % 5);
+                p.tint = idx < list.size() ? list[idx] : list[std::uniform_int_distribution<std::size_t>(0, list.size() - 1)(rng_)];
+            }
+            place_pedestrian(p);
+            p.animTime = std::uniform_real_distribution<float>(0, 2)(rng_);
         }
     }
     lightState_.resize(map_.lights.size());
     groupPhase_.assign(map_.lightGroups.size(), 0);
     groupStart_.assign(map_.lightGroups.size(), -1.0);
     update_lights();
+}
+
+void Sim::activate(Car& c) {
+    c.active = true;
+    c.body->set_enabled(true);
+    c.violation = 0;
+    c.runsRed = c.parked = c.unloading = false;
+    c.siren = false;
+    c.priority = 0;
+    c.waitingSince = -1;
+    c.signalLeft = c.signalRight = false;
+    // Emergency vehicles drive with the siren on (0x544644) [G: the switch-on site was not found].
+    if (c.type == 12 || c.type == 13) {
+        c.siren = true;
+        c.priority = c.type == 12 ? 101 : 100;
+    }
+}
+
+void Sim::deactivate(Car& c) {
+    // vmt+0x8c 0x54484c: unlinked, ODE disabled, parked far away, back to the pool.
+    c.active = false;
+    c.parked = c.unloading = c.siren = false;
+    c.violation = 0;
+    c.body->place(glm::vec3(static_cast<float>(c.type) * 20.0f, -500.0f, -3000.0f), glm::vec3(0, 0, 1));
+    c.body->set_enabled(false);
 }
 
 void Sim::place(Car& c, int a, int b, float dist, float cruise) {
@@ -141,6 +210,10 @@ void Sim::horn() {
     ++hornSounds;
     if (wall_ < c.lastHorn + 5.0) rules_.event(Rules::Event::HornSpam, wall_);
     c.lastHorn = wall_;
+    if (c.inHospitalZone) {  // 0x547266: the flag is cleared after the penalty
+        c.inHospitalZone = false;
+        rules_.event(Rules::Event::HornHospital, wall_);
+    }
 }
 
 void Sim::update_lights() {
@@ -178,6 +251,7 @@ int Sim::car_ahead(const Car& me, float* gap) const {
     for (std::size_t i = 0; i < cars_.size(); ++i) {
         const Car& o = cars_[i];
         if (&o == &me || !o.active || o.road != me.road || o.to != me.to) continue;
+        if (o.parked && std::abs(o.lateral - me.lateral) > 1.8f) continue;  // parked at the kerb, not in my lane
         const float g = mine - remaining(o) - o.body->params().length;
         if (g > -1.0f && g < bestGap) {
             bestGap = g;
@@ -222,21 +296,52 @@ void Sim::advance_link(Car& c) {
 
 void Sim::ai_control(Car& c, double dtd) {
     const float dt = static_cast<float>(dtd);
+    if (c.parked) {  // wrong-parked car: static, no lights (0x4e4a4c)
+        c.body->set_kmh(0);
+        c.cmd = 0;
+        c.brakeLights = false;
+        return;
+    }
     choose_route(c);
-    const float rem = remaining(c);
-    if (rem < 1.0f) advance_link(c);
-    const float w = c.road >= 0 ? map_.roads[static_cast<std::size_t>(c.road)].width : 6.0f;
-    // Lane function 0x545cbc (turn bias omitted where the turn class is unknown).
-    c.lateral = approach(c.lateral, w / 4, 2.0f * dt);
+    const float rem0 = remaining(c);
+    if (rem0 < 1.0f) advance_link(c);
+    if (c.road < 0 || c.to < 0) return;
+    const float w = map_.roads[static_cast<std::size_t>(c.road)].width;
     const float kmh = c.body->kmh();
     c.target = c.cruise;
-    // Traffic lights: TEtkiIsik.Etkile 0x53b6d8.
-    for (std::size_t i = 0; i < map_.lights.size(); ++i) {
+    const float r = remaining(c);
+    // Lane function 0x545cbc with the turn bias toward the next node.
+    float lane = w / 4;
+    if (!c.route.empty() && map_.index != 5) {
+        const int sIn = slot_of(c.to, c.from), sOut = slot_of(c.to, c.route.front());
+        if (sIn >= 0 && sOut >= 0) {
+            const int d = ((sOut - sIn) % 4 + 4) % 4;  // 1 = left turn, 3 = right turn (right-hand traffic)
+            const float dd = std::clamp(r, 10.0f, 21.0f);
+            float k = (d == 1 || d == 3) && dd < 20 ? (20 - dd) / 27 : 0;
+            if (d == 1) k = -2 * k;
+            lane += k;
+        }
+    }
+    if (c.body->params().width / 2 > lane) lane = 2 * lane - c.body->params().width / 2;
+    if (c.type == 14) school_bus(c, dtd);
+    if (c.unloading) lane = 2.2f;
+    // Overtaking a parked car on the same lane (0x5398f8, simplified): use the opposite lane.
+    float gap = 0;
+    const int ahead = car_ahead(c, &gap);
+    const bool overtake = ahead >= 0 && cars_[static_cast<std::size_t>(ahead)].parked && gap < 18 && r > 4 && map_.index != 5;
+    if (overtake) {
+        if (!c.signalLeft) ++hornSounds, c.signalLeft = true;  // honk 0x5412a4 [audible only near the camera]
+        lane = -w / 4;
+    } else if (c.signalLeft && !c.unloading) {
+        c.signalLeft = false;
+    }
+    c.lateral = approach(c.lateral, lane, (c.unloading ? 1.0f : 2.0f) * dt);
+    // Traffic lights: TEtkiIsik.Etkile 0x53b6d8; emergency cars with the siren on ignore them.
+    for (std::size_t i = 0; i < map_.lights.size() && !c.siren; ++i) {
         const auto& L = map_.lights[i];
         if (L.on != c.to || L.toward != c.from) continue;
         const auto& s = lightState_[i];
         if (!(s.red || s.yellow)) continue;
-        const float r = remaining(c);
         if (c.runsRed) {
             if (r > kStopLine && r < kStopLine + 1.0f) {
                 c.violation = 1;
@@ -250,17 +355,27 @@ void Sim::ai_control(Car& c, double dtd) {
             if (c.target < 0.01f) c.target = 0;
         }
     }
-    // Following on the same road.
-    float gap = 0;
-    const int ahead = car_ahead(c, &gap);
-    if (ahead >= 0 && gap < 8.0f) c.target = std::min(c.target, std::max(kmh / 2 - (8.0f - gap) * 4, 0.0f));
+    // Following: blocked by the car ahead; stop behind an unloading school bus within 25 m (0x539bfc).
+    if (ahead >= 0 && !overtake) {
+        const Car& o = cars_[static_cast<std::size_t>(ahead)];
+        if (o.unloading && gap < 25) c.target = std::min(c.target, std::max(gap - 4.0f, 0.0f));
+        else if (gap < 8.0f) c.target = std::min(c.target, std::max(kmh / 2 - (8.0f - gap) * 4, 0.0f));
+    }
+    if (c.unloading) c.target = r >= 8 && c.lateral >= 2.0f ? 0.0f : std::min(c.target, 15.0f);
+    // Unsignalled junctions: give way (0x5390d0); waiting more than 4 s breaks deadlocks.
+    int code = 0;
+    if (!right_of_way(c, &code)) {
+        if (c.waitingSince < 0) c.waitingSince = wall_;
+        if (wall_ - c.waitingSince < 4.0) c.target = std::min(c.target, std::max(r - 4.0f, 0.0f));
+    } else {
+        c.waitingSince = -1;
+    }
     // Steering toward a look-ahead point on the lane (next road near the end).
     const glm::vec3 P = c.body->position();
     const glm::vec3 A = node(c.from), B = node(c.to);
     const glm::vec3 f = glm::normalize(flat(B - A));
     const float look = 6.0f;
     glm::vec3 tp;
-    const float r = remaining(c);
     if (r > look || c.route.empty()) {
         tp = B - f * std::max(r - look, 0.0f) + right_of(f) * c.lateral;
     } else {
@@ -273,12 +388,19 @@ void Sim::ai_control(Car& c, double dtd) {
     const float ang = std::atan2(-glm::cross(fw, to).y, glm::dot(fw, to));  // + = target to the right
     c.body->steer = std::clamp(ang * 1.5f, -1.0f, 1.0f);
     // Curve slow-down (0x5429a4).
-    if (c.target > 5) c.target = std::min(c.target, std::max(10.0f, c.target - std::abs(c.body->steer) * (c.target - 1.5f)));
-    const float accel = kmh > c.target ? 50.0f : 25.0f;
+    if (c.target > 5 && !overtake) c.target = std::min(c.target, std::max(10.0f, c.target - std::abs(c.body->steer) * (c.target - 1.5f)));
+    const float accel = kmh > c.target ? (map_.index == 5 ? 100.0f : 50.0f) : 25.0f;
     c.cmd = approach(c.cmd, c.target, accel * dt);
     c.body->set_kmh(c.cmd);
     c.body->motorRunning = true;
     c.brakeLights = kmh < 2 || (kmh > 0 && (kmh - c.target) / kmh > 0.0025f);
+    // Turn signals within 30 m of the node, toward the next route node (0x542958/0x542874).
+    if (!overtake && !c.unloading && !c.route.empty()) {
+        const int sIn = slot_of(c.to, c.from), sOut = slot_of(c.to, c.route.front());
+        const int d = sIn >= 0 && sOut >= 0 ? ((sOut - sIn) % 4 + 4) % 4 : 2;
+        c.signalLeft = r < 30 && d == 1;
+        c.signalRight = r < 30 && d == 3;
+    }
 }
 
 void Sim::update_player_road(Car& c) {
@@ -376,6 +498,12 @@ void Sim::player_rules(Car& c) {
         c.lastJunction = wall_;
         rules_.event(Rules::Event::JunctionFast, wall_);
     }
+    // Right of way at unsignalled junctions (0x546367): inside the junction edge without priority, 2 s cooldown.
+    int code = 0;
+    if (!right_of_way(c, &code) && rem < 3.0f && kmh > 3.0f && code > 1 && wall_ > c.lastRowPenalty + 2.0) {
+        c.lastRowPenalty = wall_;
+        rules_.event(code == 2 ? Rules::Event::RightOfWayRight : code == 3 ? Rules::Event::RightOfWayAhead : Rules::Event::RightOfWayLeft, wall_);
+    }
     // Tailgating (0x546128): distance gate not recovered; 6 m chosen.
     float gap = 0;
     if (car_ahead(c, &gap) >= 0 && gap < 6.0f && kmh > 10.0f && wall_ > c.lastTailgate + 3.0) {
@@ -387,12 +515,15 @@ void Sim::player_rules(Car& c) {
 void Sim::violation_generator() {
     if (wall_ <= lastViolationRoll + kViolationEvery) return;
     const int r = std::uniform_int_distribution<int>(0, 2)(rng_);
-    if (r == 2) return;  // arms a wrong-parking car for the next placement; Talim never re-places cars
+    if (r == 2) {  // arms a wrong-parking car for the next placement; Talim never re-places cars
+        if (map_.index != 5) armParking_ = true;  // Canlilar+0x30; the 15 s timer is not restarted
+        return;
+    }
     float gap = 0;
     const int a = car_ahead(player(), &gap);
     if (a < 0) return;
     Car& c = cars_[static_cast<std::size_t>(a)];
-    if (c.violation || c.type == 12 || c.type == 13 || c.type == 14) return;
+    if (c.violation || c.parked || c.type == 12 || c.type == 13 || c.type == 14) return;
     lastViolationRoll = wall_;
     if (r == 0) {
         c.runsRed = true;
@@ -450,6 +581,7 @@ void Sim::update_pedestrians(double dtd) {
                 if (c.active && c.body && glm::length(flat(c.body->position()) - next) < 2.0f) target = 0;
         p.speed = approach(p.speed, target, 10.0f * dt);
         p.along += p.speed * dt;
+        if (p.speed > 0.05f) p.animTime += dt * p.speed / (4.0f / 3.0f);
         p.dir = f;
         p.pos = A + f * p.along + right_of(f) * 0.8f;
         // Player hits a pedestrian: -17 (0x54586c).
@@ -461,6 +593,7 @@ void Sim::update_pedestrians(double dtd) {
         if (w.crossing && kmh > 5.0f && glm::length(P - flat(p.pos)) < kmh / 3.6f + w.len / 2 + 2 && wall_ > lastYield_ + 5.0) {
             lastYield_ = wall_;
             rules_.notice("Dikkat Yayaya Öncelik Tanı", wall_);
+            if (++yieldCount_ % 5 == 0) ++pedYieldSounds;  // 0x509304
         }
         if (p.along >= len) {
             std::vector<std::size_t> opts;
@@ -505,8 +638,14 @@ void Sim::update(double dt, const DriveInput& input) {
     time_ += dt;
     Car& p = player();
     update_player_road(p);
+    p.inHospitalZone = std::find(hospitalRoads_.begin(), hospitalRoads_.end(), p.road) != hospitalRoads_.end() &&
+                       (p.inHospitalZone || p.road != p.prevRoad);
+    p.prevRoad = p.road;
     player_rules(p);
+    bus_rules(p);
     violation_generator();
+    spawner();
+    if (hasTrain_) update_train(dt);
     update_pedestrians(dt);
     rules_.expire(wall_);
 }

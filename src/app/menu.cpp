@@ -53,7 +53,7 @@ const Texture* App::image(const std::string& winPath, bool key) {
         try {
             Image img = load_image(*p);
             if (key) key_bottom_left(img);
-            t = r_.texture_image(id, img);
+            t = r_->texture_image(id, img);
         } catch (const std::exception& e) {
             log_warn("{}", e.what());
         }
@@ -80,7 +80,7 @@ const Texture* App::glyph(const std::string& obj, int index, int count) {
                     std::copy_n(full.rgba.data() + (static_cast<std::size_t>(y) * full.w + static_cast<std::size_t>(index * img.w)) * 4,
                                 static_cast<std::size_t>(img.w) * 4, img.rgba.data() + static_cast<std::size_t>(y) * img.w * 4);
                 key_bottom_left(img);
-                t = r_.texture_image(id, img);
+                t = r_->texture_image(id, img);
             } catch (const std::exception& e) {
                 log_warn("glyph {}: {}", obj, e.what());
             }
@@ -106,7 +106,7 @@ void App::message_box(std::string text, std::string caption) {
 }
 
 void App::draw_bar(float x, float y, float w, float h, const std::string& t, glm::vec3 bg, glm::vec3 fg, TextRenderer::Font f) {
-    r_.quad(x, y, w, h, nullptr, glm::vec4(bg, 1));
+    r_->quad(x, y, w, h, nullptr, glm::vec4(bg, 1));
     text_.draw(t, x + w / 2, y + (h - text_.line_height(f)) / 2, f, glm::vec4(fg, 1), 2);
 }
 
@@ -118,7 +118,7 @@ void App::draw_button(const DfmObject& b, glm::vec2 o, bool enabled) {
     const bool hover = enabled && inside(mouse_, x, y, w, h);
     float gy = y + 3;
     if (g) {
-        r_.quad(x + (w - static_cast<float>(g->w)) / 2, gy, static_cast<float>(g->w), static_cast<float>(g->h), g,
+        r_->quad(x + (w - static_cast<float>(g->w)) / 2, gy, static_cast<float>(g->w), static_cast<float>(g->h), g,
                 enabled ? glm::vec4(1) : glm::vec4(1, 1, 1, 0.5f));
         gy += static_cast<float>(g->h) + 2;
     }
@@ -198,6 +198,7 @@ void App::quiz_click(int line) {
         licenceThisRun_ = true;
         profile_->set_licence(true);
         log_info("licence quiz passed ({} correct)", quiz_->correct());
+        start_movie("Video\\cancan.avi", true);  // plays in paVid (0x515e60 tail); Indeo 4.1 via FFmpeg
     } else if (quiz_->state() == LicenceQuiz::State::Failed) {
         profile_->set_score(0);
         message_box(exe_->pchar_or(0x517380, "Oyuna baslamak icin gerekli sürücü belgesini alamadiniz. Lutfen tekrar deneyin."),
@@ -238,6 +239,7 @@ void App::save_profile() {
 
 void App::menu_wheel(float dy) {
     if (screen_ == Screen::Help) helpScroll_ = std::clamp(helpScroll_ - dy * 60, 0.0f, 1760.0f);
+    if (screen_ == Screen::Playlist) playlist_wheel(dy);
 }
 
 void App::menu_text(const char* t) {
@@ -286,6 +288,10 @@ void App::menu_key(SDL_Keycode k) {
 void App::menu_click(glm::vec2 p, bool) {
     if (!modal_.empty()) {
         modal_.clear();
+        return;
+    }
+    if (screen_ == Screen::Playlist) {
+        playlist_click(p, false);
         return;
     }
     if (const DfmObject* q = giris_.find("SpeedButton2"); q && inside(p, 975, 718, 41, 41)) {
@@ -381,7 +387,7 @@ void App::menu_click(glm::vec2 p, bool) {
             } else if (hit("SpeedButton5")) {
                 if (auto b = fs_->find("bilgi.html")) SDL_OpenURL(("file://" + b->string()).c_str());
             } else if (hit("SpeedButton13")) {
-                message_box("Müzik listesi düzenleyicisi bu sürümde yok: oyun playlist.m3u dosyasını kullanır.", "Bilgi");
+                playlist_open();
             } else if (hit("SpeedButton12")) {  // Başa Dön (0x5173d0)
                 quiz_.reset();
                 profile_.reset();
@@ -409,8 +415,8 @@ void App::menu_click(glm::vec2 p, bool) {
 
 void App::menu_draw() {
     using F = TextRenderer::Font;
-    r_.begin_frame(vw_, vh_, {1, 1, 1});
-    r_.begin_2d(1024, 768);
+    r_->begin_frame(vw_, vh_, {1, 1, 1});
+    r_->begin_2d(1024, 768);
     const bool high = screen_ == Screen::Main || screen_ == Screen::MapSelect;
     const float hy = high ? -210.0f : -35.0f;
     // Intro animation (Timer1 0x515e60, 15 ms ticks): red -> yellow (tick 20) -> green (tick 50).
@@ -418,8 +424,8 @@ void App::menu_draw() {
     const double tick = introTime_ < 0 ? 0 : introTime_ / 0.015;
     const char* lamp = tick >= 50 ? "maps\\lambayesil.bmp" : tick >= 20 ? "maps\\lambasari.bmp" : "maps\\lambakirmizi.bmp";
     if (introTime_ >= 0 && tick >= 70 && !music_ && profile_) play_music("sesler\\trafik_ses2.mp3");
-    if (const Texture* t = image("maps\\sehir01C.jpg")) r_.quad(92, hy, 840, 500, t);
-    if (const Texture* t = image(lamp, true)) r_.quad(488, hy + 39, 71, 188, t);
+    if (const Texture* t = image("maps\\sehir01C.jpg")) r_->quad(92, hy, 840, 500, t);
+    if (const Texture* t = image(lamp, true)) r_->quad(488, hy + 39, 71, 188, t);
     // Decorative cars (araba01..12.bmp) scroll along the street from tick 90.
     if (tick >= 90) {
         if (clock_ >= nextDeco_) {
@@ -429,22 +435,22 @@ void App::menu_draw() {
         for (auto& d : deco_) {
             d.x += 2.5f;
             if (const Texture* t = image(std::format("maps\\araba{:02}.bmp", d.img), true))
-                r_.quad(92 + d.x, hy + 494 - static_cast<float>(t->h), static_cast<float>(t->w), static_cast<float>(t->h), t);
+                r_->quad(92 + d.x, hy + 494 - static_cast<float>(t->h), static_cast<float>(t->w), static_cast<float>(t->h), t);
         }
         std::erase_if(deco_, [](const DecoCar& d) { return d.x > 860; });
     }
-    r_.quad(0, 0, 92, 768, nullptr, glm::vec4(1));  // street ends at the picture edges
-    r_.quad(932, 0, 92, 768, nullptr, glm::vec4(1));
+    r_->quad(0, 0, 92, 768, nullptr, glm::vec4(1));  // street ends at the picture edges
+    r_->quad(932, 0, 92, 768, nullptr, glm::vec4(1));
 
     switch (screen_) {
         case Screen::Title: {
             text_.draw(exe_->ansi_or(0x517a48, "Başlamak için resme tıklayın..."), 512, 476, F::Ui, {0, 0, 0, 1}, 2);
-            if (const Texture* t = image("maps\\giris_alt_s.jpg")) r_.quad(318, 493, 387, 253, t);
+            if (const Texture* t = image("maps\\giris_alt_s.jpg")) r_->quad(318, 493, 387, 253, t);
             break;
         }
         case Screen::Help: {
-            r_.quad(kHelp.x, kHelp.y, 897, 681, nullptr, glm::vec4(kPanel, 1));
-            r_.quad(kHelpView.x, kHelpView.y, kHelpView.z, kHelpView.w, nullptr, glm::vec4(kPanel, 1));
+            r_->quad(kHelp.x, kHelp.y, 897, 681, nullptr, glm::vec4(kPanel, 1));
+            r_->quad(kHelpView.x, kHelpView.y, kHelpView.z, kHelpView.w, nullptr, glm::vec4(kPanel, 1));
             // ScrollBox1 children with their DFM positions; texts from the executable.
             const glm::vec2 o{kHelpView.x, kHelpView.y - helpScroll_};
             glEnable(GL_SCISSOR_TEST);
@@ -456,7 +462,7 @@ void App::menu_draw() {
             for (auto [n, f] : kImgs)
                 if (const DfmObject* d = giris_.find(n))
                     if (const Texture* t = image(f))
-                        r_.quad(o.x + static_cast<float>(d->num("Left")), o.y + static_cast<float>(d->num("Top")), static_cast<float>(d->num("Width")),
+                        r_->quad(o.x + static_cast<float>(d->num("Left")), o.y + static_cast<float>(d->num("Top")), static_cast<float>(d->num("Width")),
                                 static_cast<float>(d->num("Height")), t);
             static const std::pair<const char*, std::uint32_t> kTexts[] = {{"Label17", 0x51825c}, {"Label19", 0x518280}, {"Label13", 0x5183b4},
                 {"Label10", 0x5183e8}, {"Label14", 0x5184d0}, {"Label15", 0x5185b8}, {"Label18", 0x5186a8}, {"Label16", 0x5186d4}};
@@ -480,21 +486,21 @@ void App::menu_draw() {
                     }
                 }
             glDisable(GL_SCISSOR_TEST);
-            if (const Texture* t = glyph("SpeedButton7")) r_.quad(470, 647, 65, 65, t);
+            if (const Texture* t = glyph("SpeedButton7")) r_->quad(470, 647, 65, 65, t);
             break;
         }
         case Screen::DriverList:
         case Screen::NewDriver: {
             const glm::vec2 o = kPanel2;
-            r_.quad(o.x, o.y, 289, 273, nullptr, glm::vec4(kPanel, 1));
-            if (const Texture* t = image("maps\\zemin01_k.jpg")) r_.quad(o.x + 1, o.y + 1, 287, 271, t, glm::vec4(1), {0, 0, 1, 271.0f / 321.0f});
+            r_->quad(o.x, o.y, 289, 273, nullptr, glm::vec4(kPanel, 1));
+            if (const Texture* t = image("maps\\zemin01_k.jpg")) r_->quad(o.x + 1, o.y + 1, 287, 271, t, glm::vec4(1), {0, 0, 1, 271.0f / 321.0f});
             if (screen_ == Screen::DriverList) {
                 draw_bar(o.x + 8, o.y + 8, 273, 17, exe_->ansi_or(0x517ad8, "Sürücü Listesi"), kPanel, {1, 1, 1}, F::UiBold);
-                r_.quad(o.x + 8, o.y + 24, 273, 153, nullptr, glm::vec4(kListBg, 1));
+                r_->quad(o.x + 8, o.y + 24, 273, 153, nullptr, glm::vec4(kListBg, 1));
                 for (std::size_t i = 0; i < profiles_.size() && i < 7; ++i) {
                     const float y = o.y + 24 + 20 * static_cast<float>(i);
                     const bool sel = static_cast<int>(i) == selected_;
-                    if (sel) r_.quad(o.x + 8, y, 273, 20, nullptr, {0, 0, 0.5f, 1});
+                    if (sel) r_->quad(o.x + 8, y, 273, 20, nullptr, {0, 0, 0.5f, 1});
                     text_.draw(profiles_[i].name() + " " + profiles_[i].surname(), o.x + 11, y + 1, F::Hud, sel ? glm::vec4(1) : glm::vec4(0, 0, 0, 1));
                 }
                 for (const char* n : {"RxSpeedButton1", "SpeedButton10"})
@@ -505,19 +511,19 @@ void App::menu_draw() {
                 const float ly[4] = {41, 65, 89, 114};
                 const char* fb[4] = {"Adın ", "Soyadın ", "Yaşın ", "Şehir "};
                 for (int i = 0; i < 4; ++i) {
-                    r_.quad(o.x + 19, o.y + ly[i], 54, 17, nullptr, glm::vec4(kLabelBlue, 1));
+                    r_->quad(o.x + 19, o.y + ly[i], 54, 17, nullptr, glm::vec4(kLabelBlue, 1));
                     text_.draw(exe_->ansi_or(labels[i], fb[i]), o.x + 72, o.y + ly[i] + 1, F::UiBold, {1, 1, 1, 1}, 1);
                     text_.draw("*", o.x + 6, o.y + ly[i], F::Big, {1, 0, 0, 1});
                 }
                 const float ey[3] = {40, 64, 112};
                 for (int i = 0; i < 3; ++i) {
-                    r_.quad(o.x + 72, o.y + ey[i], 209, 21, nullptr, {0.5f, 0.5f, 0.5f, 1});
-                    r_.quad(o.x + 73, o.y + ey[i] + 1, 207, 19, nullptr, {1, 1, 1, 1});
+                    r_->quad(o.x + 72, o.y + ey[i], 209, 21, nullptr, {0.5f, 0.5f, 0.5f, 1});
+                    r_->quad(o.x + 73, o.y + ey[i] + 1, 207, 19, nullptr, {1, 1, 1, 1});
                     const bool caret = formFocus_ == i && static_cast<long>(clock_ * 2) % 2 == 0;
                     text_.draw(form_[i] + (caret ? "|" : ""), o.x + 75, o.y + ey[i] + 1, F::Hud, {0, 0, 0, 1});
                 }
-                r_.quad(o.x + 72, o.y + 88, 41, 21, nullptr, {0.5f, 0.5f, 0.5f, 1});
-                r_.quad(o.x + 73, o.y + 89, 39, 19, nullptr, {1, 1, 1, 1});
+                r_->quad(o.x + 72, o.y + 88, 41, 21, nullptr, {0.5f, 0.5f, 0.5f, 1});
+                r_->quad(o.x + 73, o.y + 89, 39, 19, nullptr, {1, 1, 1, 1});
                 text_.draw(std::to_string(formAge_) + " ▾", o.x + 75, o.y + 90, F::Ui, {0, 0, 0, 1});
                 for (const char* n : {"SpeedButton9", "SpeedButton8"})
                     if (const DfmObject* b = giris_.find(n)) draw_button(*b, o);
@@ -527,15 +533,15 @@ void App::menu_draw() {
         case Screen::Main:
         case Screen::MapSelect: {
             const glm::vec2 o = panel1();
-            r_.quad(o.x, o.y, 705, 481, nullptr, glm::vec4(kPanel, 1));
+            r_->quad(o.x, o.y, 705, 481, nullptr, glm::vec4(kPanel, 1));
             for (const char* n : {"SpeedButton3", "SpeedButton4", "SpeedButton6", "SpeedButton5", "SpeedButton13", "SpeedButton12"})
                 if (const DfmObject* b = giris_.find(n)) draw_button(*b, o);
-            r_.quad(o.x + 48, o.y + 104, 600, 57, nullptr, {0, 0, 0, 1});  // Image5: licence wheels
+            r_->quad(o.x + 48, o.y + 104, 600, 57, nullptr, {0, 0, 0, 1});  // Image5: licence wheels
             if (quiz_)
                 for (int i = 0; i < quiz_->correct(); ++i)
-                    if (const Texture* t = image("maps\\direksiyon_k.bmp", true)) r_.quad(o.x + 48 - 48 + 50.0f * static_cast<float>(i + 1), o.y + 104, 50, 50, t);
+                    if (const Texture* t = image("maps\\direksiyon_k.bmp", true)) r_->quad(o.x + 48 - 48 + 50.0f * static_cast<float>(i + 1), o.y + 104, 50, 50, t);
             const glm::vec2 img = o + glm::vec2(49, 169);
-            if (const Texture* t = image("maps\\zemin02_k.jpg")) r_.quad(img.x, img.y, 598, 298, t);
+            if (const Texture* t = image("maps\\zemin02_k.jpg")) r_->quad(img.x, img.y, 598, 298, t);
             if (quiz_ && quiz_->state() != LicenceQuiz::State::Passed) {
                 for (const auto& l : quiz_layout(quiz_->current())) {
                     const auto rc = l.answer >= 0 ? quiz_line_rect(l.answer) : std::nullopt;
@@ -546,18 +552,19 @@ void App::menu_draw() {
                 }
                 if (quiz_->state() == LicenceQuiz::State::Failed) quizFailedShown_ = true;
             }
+            if (movie_.active) draw_movie(o.x + 48, o.y + 168, 600, 300);  // paVid
             if (popupOpen_) {
                 const glm::vec2 b = o + glm::vec2(240, 97);
-                r_.quad(b.x, b.y, 260, 66, nullptr, {0.4f, 0.4f, 0.4f, 1});
-                r_.quad(b.x + 1, b.y + 1, 258, 64, nullptr, {0.94f, 0.94f, 0.94f, 1});
+                r_->quad(b.x, b.y, 260, 66, nullptr, {0.4f, 0.4f, 0.4f, 1});
+                r_->quad(b.x + 1, b.y + 1, 258, 64, nullptr, {0.94f, 0.94f, 0.94f, 1});
                 text_.draw("ToyotaSA İnternet Sitesi... (kapalı)", b.x + 8, b.y + 4, F::Ui, {0.4f, 0.4f, 0.4f, 1});
                 text_.draw("Oyunla İlgili Sorularınız İçin... (kapalı)", b.x + 8, b.y + 24, F::Ui, {0.4f, 0.4f, 0.4f, 1});
                 text_.draw("Anahtar: " + (profile_ && !profile_->key().empty() ? profile_->key() : std::string("-")), b.x + 8, b.y + 44, F::Ui, {0, 0, 0, 1});
             }
             if (screen_ == Screen::MapSelect) {
                 const glm::vec2 m = kMapSel;
-                r_.quad(m.x, m.y, 455, 113, nullptr, {0.5f, 0.5f, 0.5f, 1});
-                r_.quad(m.x + 1, m.y + 1, 453, 111, nullptr, {1, 1, 1, 1});
+                r_->quad(m.x, m.y, 455, 113, nullptr, {0.5f, 0.5f, 0.5f, 1});
+                r_->quad(m.x + 1, m.y + 1, 453, 111, nullptr, {1, 1, 1, 1});
                 draw_bar(m.x + 2, m.y + 2, 447, 16, giris_.find("Label12") ? giris_.find("Label12")->text("Caption") : "", kPanel, {0, 0, 0}, F::Medium);
                 for (int i = 1; i <= 4; ++i)
                     if (const DfmObject* b = giris_.find("btHarita" + std::to_string(i))) draw_button(*b, m, i == 1 || (profile_ && profile_->unlocked() >= i));
@@ -566,15 +573,16 @@ void App::menu_draw() {
         }
         default: break;
     }
-    if (const Texture* t = glyph("SpeedButton2")) r_.quad(975, 718, 41, 41, t);
+    if (const Texture* t = glyph("SpeedButton2")) r_->quad(975, 718, 41, 41, t);
+    if (screen_ == Screen::Playlist) playlist_draw();
     if (screen_ == Screen::Loading) {
         // TFrameYukleniyor: black frame, title, map picture, map info.
         const MapData* m = loadingMap_ >= 1 && loadingMap_ <= static_cast<int>(maps_.size()) ? &maps_[static_cast<std::size_t>(loadingMap_ - 1)] : nullptr;
-        r_.quad(0, 0, 1024, 768, nullptr, {0, 0, 0, 1});
+        r_->quad(0, 0, 1024, 768, nullptr, {0, 0, 0, 1});
         const glm::vec2 f{(1024 - 443) / 2.0f, (768 - 277) / 2.0f};
         text_.draw(exe_->ansi_or(exe_va::kLoaderTitle, "Harita Yükleniyor"), 512, f.y + 10, F::Huge, {1, 1, 1, 1}, 2);
         if (m)
-            if (const Texture* t = image(m->loadingImage)) r_.quad(f.x, f.y + 57, 443, 150, t);
+            if (const Texture* t = image(m->loadingImage)) r_->quad(f.x, f.y + 57, 443, 150, t);
         static const std::uint32_t kTitles[] = {0x52d300, 0x528ca0, 0x50671c, 0x521014};
         const int s = static_cast<int>(timeLimit_);
         const std::string title = (loadingMap_ >= 1 && loadingMap_ <= 4 ? exe_->ansi_or(kTitles[loadingMap_ - 1], "") : std::string()) +
@@ -589,13 +597,13 @@ void App::menu_draw() {
     if (!modal_.empty()) {
         const auto lines = text_.wrap(modal_, F::Ui, 460);
         const float h = 80 + 18 * static_cast<float>(lines.size()), x = 512 - 250, y = 384 - h / 2;
-        r_.quad(x, y, 500, h, nullptr, {0.3f, 0.3f, 0.3f, 1});
-        r_.quad(x + 1, y + 1, 498, 22, nullptr, {0.04f, 0.14f, 0.42f, 1});
+        r_->quad(x, y, 500, h, nullptr, {0.3f, 0.3f, 0.3f, 1});
+        r_->quad(x + 1, y + 1, 498, 22, nullptr, {0.04f, 0.14f, 0.42f, 1});
         text_.draw(modalCaption_, x + 8, y + 4, F::UiBold, {1, 1, 1, 1});
-        r_.quad(x + 1, y + 23, 498, h - 24, nullptr, {0.83f, 0.82f, 0.78f, 1});
+        r_->quad(x + 1, y + 23, 498, h - 24, nullptr, {0.83f, 0.82f, 0.78f, 1});
         for (std::size_t i = 0; i < lines.size(); ++i) text_.draw(lines[i], x + 20, y + 36 + 18 * static_cast<float>(i), F::Ui, {0, 0, 0, 1});
-        r_.quad(512 - 37, y + h - 34, 75, 23, nullptr, {0.4f, 0.4f, 0.4f, 1});
-        r_.quad(512 - 36, y + h - 33, 73, 21, nullptr, {0.9f, 0.9f, 0.88f, 1});
+        r_->quad(512 - 37, y + h - 34, 75, 23, nullptr, {0.4f, 0.4f, 0.4f, 1});
+        r_->quad(512 - 36, y + h - 33, 73, 21, nullptr, {0.9f, 0.9f, 0.88f, 1});
         text_.draw("OK", 512, y + h - 31, F::Ui, {0, 0, 0, 1}, 2);
     }
 }

@@ -34,3 +34,12 @@ struct SmdModel {
 SmdModel parse_smd(std::string_view text);
 
 }  // namespace tto
+
+namespace tto {
+
+// Skeletal pose of a reference SMD with another SMD's animation frame (bones matched by
+// name; bones missing from the animation keep the reference pose). Positions and normals
+// are skinned rigidly (one bone per vertex, studiomdl). Matrices: Rz*Ry*Rx, parent first.
+Mesh smd_pose(const SmdModel& ref, const SmdModel& anim, std::size_t frame);
+
+}  // namespace tto

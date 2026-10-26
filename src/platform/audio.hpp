@@ -38,6 +38,9 @@ public:
     const Clip* load(const std::filesystem::path& p);  // WAV or MP3, cached
     void play(const Clip* c, float gain = 1.0f);
     std::unique_ptr<Voice> loop(const Clip* c, float gain = 1.0f);
+    std::unique_ptr<Voice> start(const Clip* c, float gain = 1.0f);  // one-shot that can be stopped
+    // Register decoded PCM (S16 interleaved) under a key, e.g. a video's audio track.
+    const Clip* from_pcm(const std::string& key, int rate, int channels, const std::vector<std::int16_t>& s16);
     void update();  // refill looping voices; call once per frame
     void set_master(float g);
 

@@ -1,0 +1,29 @@
+# Music-list editor: browse a folder, add two tracks, reorder, remove, save to the profile dir.
+wait 0.3
+click 510 620
+click 502 678
+until screen=DriverList 5
+click 460 720
+until screen=NewDriver 5
+click 540 530
+type Gecer
+click 540 602
+type Ankara
+click 462 705
+until screen=Main 5
+click 692 360
+expect screen=Playlist
+pldir playlist
+click 448 645
+click 300 450
+click 300 450
+click 300 466
+click 748 645
+shot pl_added
+click 600 104
+click 996 412
+click 812 645
+click 876 645
+until screen=Main 2
+expect playlist=1
+quit

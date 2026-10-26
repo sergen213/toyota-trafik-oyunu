@@ -3,7 +3,9 @@
 ## Dependencies (distribution packages)
 
 ```sh
-sudo pacman -S --needed base-devel cmake ninja git sdl3 sdl3_ttf glew glm mpg123 fontconfig stb nlohmann-json gtest noto-fonts
+sudo pacman -S --needed base-devel cmake ninja git sdl3 sdl3_ttf glew glm mpg123 fontconfig stb nlohmann-json gtest noto-fonts \
+    vulkan-headers vulkan-icd-loader shaderc ffmpeg python
+# optional: vulkan-validation-layers (VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation)
 ```
 
 ODE is not packaged with trimesh support on Arch. CMake therefore uses the system `ode` when pkg-config finds it,

@@ -25,7 +25,8 @@ public:
     dWorldID world() const { return world_; }
     dSpaceID space() const { return space_; }
 
-    void add_static_box(glm::vec3 center, glm::vec3 size, glm::vec3 facing);
+    dGeomID add_static_box(glm::vec3 center, glm::vec3 size, glm::vec3 facing);
+    void remove_static(dGeomID g);  // e.g. a level-crossing blocking box
     void add_static_trimesh(std::vector<glm::vec3> verts, std::vector<int> indices);
     // Advance by one real frame; calls before_step() before every ODE step.
     void advance(double realDt, const std::function<void()>& beforeStep);
@@ -104,6 +105,9 @@ private:
 
 struct DriveInput {
     bool up = false, down = false, left = false, right = false, brake = false, handbrake = false;
+    // Joystick mode ('j'): axes in percent -100..100 (TJoystick), Y negative = forward.
+    bool joystick = false;
+    float joyX = 0, joyY = 0;
 };
 
 // TMotorlu.PlayerInput (0x541410), keyboard mode. dt = real frame seconds.

@@ -19,6 +19,10 @@ void usage() {
         "  --fullscreen     start fullscreen (F11 toggles)\n"
         "  --size WxH       window size (default 1024x768)\n"
         "  --mute           no audio\n"
+        "  --renderer <r>   auto (default: Vulkan, falls back to OpenGL), vulkan or gl\n"
+        "  --no-rt          disable Vulkan ray-traced shadows\n"
+        "  --fsr <q>        AMD FSR 3.1.4 upscaling (Vulkan): off, native, quality, balanced, performance, ultra\n"
+        "  --framegen       FSR 3.1.4 frame generation (implies --fsr quality when FSR is off)\n"
         "  --script <file>  run an automated input script (tests), --shots <dir> for its screenshots\n"
         "  --fixed-step     simulate 1/60 s per frame (deterministic tests)\n"
         "  --seed <n>       random seed\n"
@@ -60,6 +64,16 @@ int main(int argc, char** argv) {
             if (std::sscanf(s.c_str(), "%dx%d", &o.width, &o.height) != 2) { usage(); return 2; }
         } else if (a == "--fullscreen") o.fullscreen = true;
         else if (a == "--mute") o.mute = true;
+        else if (a == "--renderer") o.renderer = next();
+        else if (a == "--no-rt") o.rayTracing = false;
+        else if (a == "--fsr") {
+            static const char* q[] = {"native", "quality", "balanced", "performance", "ultra"};
+            const std::string v = next();
+            o.fsr = -1;
+            for (int k = 0; k < 5; ++k)
+                if (v == q[k]) o.fsr = k;
+            if (o.fsr < 0 && v != "off") { usage(); return 2; }
+        } else if (a == "--framegen") o.frameGen = true;
         else if (a == "--fixed-step") o.fixedStep = true;
         else if (a == "--check") check = true;
         else if (a == "-h" || a == "--help") { usage(); return 0; }

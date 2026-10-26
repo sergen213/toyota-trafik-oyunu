@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "render/gl.hpp"
+#include "render/renderer.hpp"
 
 struct TTF_Font;
 

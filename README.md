@@ -23,9 +23,13 @@ This repository contains:
 |---|---|
 | Start screen, help, driver profiles, licence quiz, map selection | working; layout and assets taken from the user's executable and files |
 | Eğitim Sahası (map 1): driving, AI traffic, traffic lights, HUD, sign questions, red-light and litter violators, penalties, timer, F4 pass, report, menu question, unlock, continue to map 2 | working; covered by automated playthrough tests |
-| Kasaba, Şehir, Şehir Merkezi, Otoban (debug map 5) | load and drive with scenery, signs, lights and AI cars; map-specific actors are missing (see ROADMAP) |
-| Pedestrians (maps 2–4: original models walk sidewalks and crossings, obey lights; hit −17; yield notice) | basic; no walk animation, no pedestrian violator question |
-| Train/level crossing, school bus, emergency vehicles, wrong parking, right-of-way rule, hospital horn rule, cutscene videos, music-list editor, joystick | **not implemented** |
+| Kasaba, Şehir, Şehir Merkezi, Otoban (debug map 5) | working: AI spawner/culling (≤ 11 cars), Otoban spawner, billboards, water sound |
+| Map actors | train + 10 level crossings with booms, bell and blocking box (Şehir); school bus unloading with lit `Dur` sign and −7 overtaking rule; ambulance/police with sirens, beacons and priority; wrong-parked violators (code 3) |
+| Rules | all penalties of RULES.md §3.4, incl. right of way (−4, Sağdan/Karşıdan/Soldan) and hospital horn (−5) |
+| Pedestrians | skeletal walk cycle (`yuru.smd`/`yuruk.smd`), clothes tint, red-light violator question (code 5) |
+| Cutscenes | intro `cancan.avi` (Indeo 4.1) after the licence quiz and the fail / map 2 / map 4 car cutscenes, via FFmpeg |
+| Menus / input | music-list editor (TfrmPlaylister), joystick mode (`j`), radio volume `z`/`x`, `t`/`y` take over a car |
+| Rendering | Vulkan 1.3 (default) with optional ray-traced shadows, AMD FSR 3.1.4 upscaling and frame generation; OpenGL 3.3 fallback |
 
 ## Quick start
 
@@ -37,6 +41,11 @@ build/toyota-trafik --game "/path/to/Toyota Trafik Oyunu v2"
 ```
 
 Controls follow the original: arrows drive, `f` brake, SPACE pause and question mode (click signs or
-offending cars), `c`/`v` signals, `h` horn, `k`/`l`/`o` camera, `m`/`n` radio, F1–F4, ESC. F11 toggles fullscreen.
+offending cars or pedestrians), `c`/`v` signals, `h` horn, `k`/`l`/`o` camera, `m`/`n`/`z`/`x` radio, `j` joystick,
+`t`/`y` take over the car ahead / back to Afacan, F1–F4, ESC. F11 toggles fullscreen.
+
+Native extras (not in the original, off by default unless noted): ray-traced shadows (on when supported, `--no-rt`,
+F9), AMD FSR 3.1.4 upscaling (`--fsr native|quality|balanced|performance|ultra`, F10 cycles) and FSR 3.1.4 frame
+generation (`--framegen`, F8). `--renderer gl` forces the OpenGL fallback.
 
 Documentation: `docs/BUILDING.md`, `docs/TESTING.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/LEGAL.md`.

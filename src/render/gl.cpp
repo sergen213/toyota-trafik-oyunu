@@ -1,4 +1,6 @@
-#include "render/gl.hpp"
+#include <GL/glew.h>
+
+#include "render/renderer.hpp"
 
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -14,13 +16,14 @@ layout(location=1) in vec3 aNrm;
 layout(location=2) in vec2 aUv;
 uniform mat4 uModel, uView, uProj;
 uniform mat3 uNrm;
+uniform vec4 uUvX;
 out vec3 vNrm; out vec2 vUv; out float vDist;
 void main() {
   vec4 w = uModel * vec4(aPos, 1.0);
   vec4 e = uView * w;
   vDist = length(e.xyz);
   vNrm = normalize(uNrm * aNrm);
-  vUv = aUv;
+  vUv = uUvX.xy + aUv * uUvX.zw;
   gl_Position = uProj * e;
 })";
 
@@ -96,34 +99,63 @@ GLuint link(const char* vs, const char* fs) {
 
 GLint U(GLuint p, const char* n) { return glGetUniformLocation(p, n); }
 
-Texture make_texture(const Image& img) {
+Texture make_texture(const Image& img, bool mipRepeat) {
     Texture t;
     t.w = img.w;
     t.h = img.h;
     for (std::size_t i = 3; i < img.rgba.size(); i += 4)
         if (img.rgba[i] < 255) { t.hasAlpha = true; break; }
-    glGenTextures(1, &t.id);
-    glBindTexture(GL_TEXTURE_2D, t.id);
-    // Images are top-down; GL expects bottom-up. 3DS/SMD UVs use v=0 at the
-    // bottom of the image, so flip rows on upload.
-    std::vector<std::uint8_t> flipped(img.rgba.size());
-    const std::size_t row = static_cast<std::size_t>(img.w) * 4;
-    for (int y = 0; y < img.h; ++y)
-        std::copy_n(img.rgba.data() + static_cast<std::size_t>(img.h - 1 - y) * row, row, flipped.data() + y * row);
+    GLuint id = 0;
+    glGenTextures(1, &id);
+    t.id = id;
+    glBindTexture(GL_TEXTURE_2D, id);
+    const auto flipped = flip_rows(img);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    if (mipRepeat) glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mipRepeat ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, mipRepeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, mipRepeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
     return t;
 }
 
+class GlRenderer final : public Renderer {
+public:
+    bool init();
+    const char* name() const override { return "OpenGL 3.3"; }
+    std::string device() const override { return reinterpret_cast<const char*>(glGetString(GL_RENDERER)); }
+    void shutdown() override;
+    void update_texture(const Texture& t, const Image& img) override;
+    void destroy_texture(Texture& t) override;
+    void destroy(GpuMesh& m) override;
+    void begin_window(int w, int h) override;
+    void end_window() override {}
+    void begin_frame(int w, int h, const glm::vec3& clear) override;
+    void draw_sky(const std::array<const Texture*, 6>& faces) override;
+    void draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& o) override;
+    using Renderer::draw;
+    void begin_2d(int w, int h) override;
+    void quad(float x, float y, float w, float h, const Texture* t, glm::vec4 color, glm::vec4 uv) override;
+    Image read_pixels(int w, int h) override;
+
+protected:
+    Texture backend_texture(const Image& img, bool mipRepeat) override { return make_texture(img, mipRepeat); }
+    std::uint32_t backend_vertices(const std::vector<float>& v, const GpuMesh& g) override;
+
+private:
+    struct Vao { GLuint vao = 0, vbo = 0; };
+    std::unordered_map<std::uint32_t, Vao> vaos_;
+    std::uint32_t nextVao_ = 1;
+    GLuint prog3d_ = 0, prog2d_ = 0, quadVao_ = 0, quadVbo_ = 0, skyVao_ = 0, skyVbo_ = 0;
+    glm::mat4 ortho_{1};
+};
+
 }  // namespace
 
-bool Renderer::init() {
+bool GlRenderer::init() {
     glewExperimental = GL_TRUE;
-    if (glewInit() != GLEW_OK) {
+    const GLenum ge = glewInit();
+    if (ge != GLEW_OK && ge != GLEW_ERROR_NO_GLX_DISPLAY) {  // EGL contexts (Wayland) report NO_GLX_DISPLAY but load fine
         log_error("glewInit failed");
         return false;
     }
@@ -144,7 +176,7 @@ bool Renderer::init() {
     Image w;
     w.w = w.h = 1;
     w.rgba = {255, 255, 255, 255};
-    white_ = make_texture(w);
+    white_ = make_texture(w, true);
 
     // Unit cube for the skybox: 6 faces x 2 triangles, pos + uv; face order as draw_sky().
     const float S = 1.0f;
@@ -178,10 +210,19 @@ bool Renderer::init() {
     return true;
 }
 
-void Renderer::shutdown() {
-    for (auto& [k, t] : cache_) glDeleteTextures(1, &t.id);
+void GlRenderer::shutdown() {
+    for (auto& [k, t] : cache_) {
+        GLuint id = t.id;
+        if (id != white_.id) glDeleteTextures(1, &id);
+    }
     cache_.clear();
-    glDeleteTextures(1, &white_.id);
+    for (auto& [h, v] : vaos_) {
+        glDeleteBuffers(1, &v.vbo);
+        glDeleteVertexArrays(1, &v.vao);
+    }
+    vaos_.clear();
+    GLuint w = white_.id;
+    glDeleteTextures(1, &w);
     glDeleteProgram(prog3d_);
     glDeleteProgram(prog2d_);
     glDeleteBuffers(1, &quadVbo_);
@@ -190,64 +231,20 @@ void Renderer::shutdown() {
     glDeleteVertexArrays(1, &skyVao_);
 }
 
-const Texture* Renderer::texture(const std::filesystem::path& p) {
-    const std::string key = p.string();
-    if (auto it = cache_.find(key); it != cache_.end()) return &it->second;
-    try {
-        return &(cache_[key] = make_texture(load_image(p)));
-    } catch (const std::exception& e) {
-        log_warn("{}", e.what());
-        return &(cache_[key] = white_);
-    }
+void GlRenderer::update_texture(const Texture& t, const Image& img) {
+    glBindTexture(GL_TEXTURE_2D, t.id);
+    const auto flipped = flip_rows(img);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.w, img.h, GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
 }
 
-const Texture* Renderer::texture_image(const std::string& key, const Image& img) {
-    if (auto it = cache_.find(key); it != cache_.end()) return &it->second;
-    return &(cache_[key] = make_texture(img));
+void GlRenderer::destroy_texture(Texture& t) {
+    GLuint id = t.id;
+    if (id) glDeleteTextures(1, &id);
+    t = {};
 }
 
-GpuMesh Renderer::upload(const Mesh& m, const glm::mat4& bake, const TextureResolver& res) {
-    GpuMesh g;
-    std::vector<float> v;
-    const glm::mat3 nb = glm::inverseTranspose(glm::mat3(bake));
-    bool first = true;
-    for (const auto& o : m.objects) {
-        for (const auto& grp : o.groups) {
-            GpuMesh::Draw d;
-            d.first = static_cast<GLsizei>(v.size() / 8);
-            if (grp.material >= 0) {
-                const auto& mat = m.materials[static_cast<std::size_t>(grp.material)];
-                d.color = {mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]};
-                d.alpha = 1.0f - mat.transparency;
-                const std::string lower = [&] {
-                    std::string s = mat.texture;
-                    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                    return s;
-                }();
-                if (lower == "null.bmp") {
-                    d.tintable = true;
-                } else if (!mat.texture.empty()) {
-                    if (auto p = res(mat.texture)) {
-                        d.tex = texture(*p);
-                        d.color = glm::vec3(1.0f);  // GLScene modulates texture with white
-                    } else {
-                        log_warn("texture not found: {}", mat.texture);
-                    }
-                }
-            }
-            for (auto idx : grp.indices) {
-                const glm::vec3 p = glm::vec3(bake * glm::vec4(o.positions[idx][0], o.positions[idx][1], o.positions[idx][2], 1));
-                const glm::vec3 n = glm::normalize(nb * glm::vec3(o.normals[idx][0], o.normals[idx][1], o.normals[idx][2]) + glm::vec3(1e-9f));
-                const Vec2 uv = o.uvs.empty() ? Vec2{0, 0} : o.uvs[idx];
-                v.insert(v.end(), {p.x, p.y, p.z, n.x, n.y, n.z, uv[0], uv[1]});
-                if (first) { g.bmin = g.bmax = p; first = false; }
-                g.bmin = glm::min(g.bmin, p);
-                g.bmax = glm::max(g.bmax, p);
-            }
-            d.count = static_cast<GLsizei>(v.size() / 8) - d.first;
-            if (d.count) g.draws.push_back(d);
-        }
-    }
+std::uint32_t GlRenderer::backend_vertices(const std::vector<float>& v, const GpuMesh&) {
+    Vao g;
     glGenVertexArrays(1, &g.vao);
     glGenBuffers(1, &g.vbo);
     glBindVertexArray(g.vao);
@@ -258,16 +255,28 @@ GpuMesh Renderer::upload(const Mesh& m, const glm::mat4& bake, const TextureReso
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(12));
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(24));
     glBindVertexArray(0);
-    return g;
+    const std::uint32_t h = nextVao_++;
+    vaos_[h] = g;
+    return h;
 }
 
-void Renderer::destroy(GpuMesh& m) {
-    glDeleteBuffers(1, &m.vbo);
-    glDeleteVertexArrays(1, &m.vao);
+void GlRenderer::destroy(GpuMesh& m) {
+    if (auto it = vaos_.find(m.handle); it != vaos_.end()) {
+        glDeleteBuffers(1, &it->second.vbo);
+        glDeleteVertexArrays(1, &it->second.vao);
+        vaos_.erase(it);
+    }
     m = {};
 }
 
-void Renderer::begin_frame(int w, int h, const glm::vec3& c) {
+void GlRenderer::begin_window(int w, int h) {
+    glViewport(0, 0, w, h);
+    glDisable(GL_SCISSOR_TEST);
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void GlRenderer::begin_frame(int w, int h, const glm::vec3& c) {
     glViewport(vpx_, vpy_, w, h);
     glEnable(GL_SCISSOR_TEST);
     glScissor(vpx_, vpy_, w, h);
@@ -278,13 +287,9 @@ void Renderer::begin_frame(int w, int h, const glm::vec3& c) {
     glDisable(GL_CULL_FACE);
 }
 
-void Renderer::set_camera(const glm::mat4& view, const glm::mat4& proj) {
-    view_ = view;
-    proj_ = proj;
-}
-
-void Renderer::draw(const GpuMesh& m, const glm::mat4& model, std::optional<glm::vec3> tint, bool unlit, float alpha,
-                    bool forceTint) {
+void GlRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& o) {
+    const auto it = vaos_.find(m.handle);
+    if (it == vaos_.end()) return;
     glUseProgram(prog3d_);
     glUniformMatrix4fv(U(prog3d_, "uModel"), 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(U(prog3d_, "uView"), 1, GL_FALSE, glm::value_ptr(view_));
@@ -294,24 +299,26 @@ void Renderer::draw(const GpuMesh& m, const glm::mat4& model, std::optional<glm:
     glUniform3fv(U(prog3d_, "uLightDir"), 1, glm::value_ptr(glm::normalize(light_.dir)));
     glUniform3fv(U(prog3d_, "uAmb"), 1, glm::value_ptr(light_.ambient));
     glUniform3fv(U(prog3d_, "uDif"), 1, glm::value_ptr(light_.diffuse));
-    glUniform1i(U(prog3d_, "uUnlit"), unlit ? 1 : 0);
+    glUniform1i(U(prog3d_, "uUnlit"), o.unlit ? 1 : 0);
     glUniform1i(U(prog3d_, "uFog"), fog_.enabled ? 1 : 0);
     glUniform3fv(U(prog3d_, "uFogColor"), 1, glm::value_ptr(fog_.color));
     glUniform2f(U(prog3d_, "uFogRange"), fog_.start, fog_.end);
+    glUniform4fv(U(prog3d_, "uUvX"), 1, glm::value_ptr(o.uv));
     glUniform1i(U(prog3d_, "uTex"), 0);
     glActiveTexture(GL_TEXTURE0);
-    glBindVertexArray(m.vao);
+    glBindVertexArray(it->second.vao);
+    const GLint base = static_cast<GLint>(m.frameVerts) * std::clamp(o.frame, 0, m.frames - 1);
     for (const auto& d : m.draws) {
-        const float a = d.alpha * alpha;
+        const float a = d.alpha * o.alpha;
         if (a < 0.999f) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             glDepthMask(GL_FALSE);
         }
         glBindTexture(GL_TEXTURE_2D, d.tex ? d.tex->id : white_.id);
-        const glm::vec3 c = (d.tintable || forceTint) && tint ? *tint : d.color;
+        const glm::vec3 c = (d.tintable || o.forceTint) && o.tint ? *o.tint : d.color;
         glUniform4f(U(prog3d_, "uColor"), c.r, c.g, c.b, a);
-        glDrawArrays(GL_TRIANGLES, d.first, d.count);
+        glDrawArrays(GL_TRIANGLES, base + static_cast<GLint>(d.first), static_cast<GLsizei>(d.count));
         if (a < 0.999f) {
             glDisable(GL_BLEND);
             glDepthMask(GL_TRUE);
@@ -320,7 +327,7 @@ void Renderer::draw(const GpuMesh& m, const glm::mat4& model, std::optional<glm:
     glBindVertexArray(0);
 }
 
-void Renderer::draw_sky(const std::array<const Texture*, 6>& faces) {
+void GlRenderer::draw_sky(const std::array<const Texture*, 6>& faces) {
     glUseProgram(prog3d_);
     glm::mat4 v = glm::mat4(glm::mat3(view_));
     const glm::mat4 model = glm::scale(glm::mat4(1), glm::vec3(10.0f));
@@ -331,6 +338,7 @@ void Renderer::draw_sky(const std::array<const Texture*, 6>& faces) {
     glUniform1i(U(prog3d_, "uUnlit"), 1);
     glUniform1i(U(prog3d_, "uFog"), 0);
     glUniform4f(U(prog3d_, "uColor"), 1, 1, 1, 1);
+    glUniform4f(U(prog3d_, "uUvX"), 0, 0, 1, 1);
     glDepthMask(GL_FALSE);
     glDisable(GL_DEPTH_TEST);
     glBindVertexArray(skyVao_);
@@ -345,7 +353,7 @@ void Renderer::draw_sky(const std::array<const Texture*, 6>& faces) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::begin_2d(int w, int h) {
+void GlRenderer::begin_2d(int w, int h) {
     ortho_ = glm::ortho(0.0f, static_cast<float>(w), static_cast<float>(h), 0.0f);
     glViewport(vpx_, vpy_, vpw_, vph_);
     glDisable(GL_DEPTH_TEST);
@@ -353,7 +361,7 @@ void Renderer::begin_2d(int w, int h) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-void Renderer::quad(float x, float y, float w, float h, const Texture* t, glm::vec4 color, glm::vec4 uv) {
+void GlRenderer::quad(float x, float y, float w, float h, const Texture* t, glm::vec4 color, glm::vec4 uv) {
     glUseProgram(prog2d_);
     glUniformMatrix4fv(U(prog2d_, "uProj"), 1, GL_FALSE, glm::value_ptr(ortho_));
     glUniform4f(U(prog2d_, "uRect"), x, y, w, h);
@@ -368,7 +376,7 @@ void Renderer::quad(float x, float y, float w, float h, const Texture* t, glm::v
     glBindVertexArray(0);
 }
 
-Image Renderer::read_pixels(int w, int h) const {
+Image GlRenderer::read_pixels(int w, int h) {
     Image img;
     img.w = w;
     img.h = h;
@@ -380,6 +388,12 @@ Image Renderer::read_pixels(int w, int h) const {
     for (int y = 0; y < h; ++y) std::copy_n(tmp.data() + static_cast<std::size_t>(h - 1 - y) * row, row, img.rgba.data() + y * row);
     for (std::size_t i = 3; i < img.rgba.size(); i += 4) img.rgba[i] = 255;
     return img;
+}
+
+std::unique_ptr<Renderer> make_gl_renderer() {
+    auto r = std::make_unique<GlRenderer>();
+    if (!r->init()) return nullptr;
+    return r;
 }
 
 }  // namespace tto

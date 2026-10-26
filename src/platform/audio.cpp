@@ -107,6 +107,20 @@ void Audio::play(const Clip* c, float gain) {
     oneshots_.push_back(s);
 }
 
+const Audio::Clip* Audio::from_pcm(const std::string& key, int rate, int channels, const std::vector<std::int16_t>& s16) {
+    Clip& c = clips_[key];
+    c.spec = {SDL_AUDIO_S16, channels, rate};
+    c.pcm.assign(reinterpret_cast<const std::uint8_t*>(s16.data()), reinterpret_cast<const std::uint8_t*>(s16.data() + s16.size()));
+    return c.pcm.empty() ? nullptr : &c;
+}
+
+std::unique_ptr<Audio::Voice> Audio::start(const Clip* c, float gain) {
+    auto v = loop(c, gain);
+    v->loop = false;
+    if (v->s) SDL_FlushAudioStream(v->s);
+    return v;
+}
+
 std::unique_ptr<Audio::Voice> Audio::loop(const Clip* c, float gain) {
     auto v = std::make_unique<Voice>();
     if (!dev_ || !c) return v;
@@ -150,6 +164,6 @@ void Audio::Voice::stop() {
     }
 }
 
-bool Audio::Voice::playing() const { return s != nullptr; }
+bool Audio::Voice::playing() const { return s != nullptr && (loop || SDL_GetAudioStreamQueued(s) > 0); }
 
 }  // namespace tto

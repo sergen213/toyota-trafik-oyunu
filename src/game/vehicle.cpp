@@ -60,7 +60,7 @@ Physics::~Physics() {
     for (auto& t : tris_) dGeomTriMeshDataDestroy(t->data);
 }
 
-void Physics::add_static_box(glm::vec3 c, glm::vec3 s, glm::vec3 facing) {
+dGeomID Physics::add_static_box(glm::vec3 c, glm::vec3 s, glm::vec3 facing) {
     dGeomID g = dCreateBox(space_, std::max(s.x, 0.01f), std::max(s.y, 0.01f), std::max(s.z, 0.01f));
     dGeomSetPosition(g, c.x, c.y, c.z);
     const glm::mat3 m = basis_from_forward(glm::length(facing) > 0 ? facing : glm::vec3(0, 0, 1));
@@ -71,6 +71,13 @@ void Physics::add_static_box(glm::vec3 c, glm::vec3 s, glm::vec3 facing) {
     }
     dGeomSetRotation(g, R);
     statics_.push_back(g);
+    return g;
+}
+
+void Physics::remove_static(dGeomID g) {
+    if (!g) return;
+    std::erase(statics_, g);
+    dGeomDestroy(g);
 }
 
 void Physics::add_static_trimesh(std::vector<glm::vec3> verts, std::vector<int> indices) {
@@ -279,13 +286,28 @@ void apply_player_input(OdeCar& car, const DriveInput& in, double dtd, bool froz
     car.steer = std::clamp(car.steer, -1.0f, 1.0f);
     car.speed = std::clamp(car.speed, -35.0f, 10.0f);
     if (!frozen) {
-        if (in.right) car.steer += car.steer < 0 ? 3 * turn : turn;
+        if (in.joystick) {
+            const float x = std::clamp(in.joyX, -100.0f, 100.0f) / 10.0f;
+            car.steer = (x < 0 ? -1.0f : 1.0f) * x * x / 300.0f;
+        } else if (in.right) car.steer += car.steer < 0 ? 3 * turn : turn;
         else if (in.left) car.steer -= car.steer > 0 ? 3 * turn : turn;
         else car.steer *= 0.5f;
     }
     if (in.handbrake) {
         car.motorRunning = false;
         car.speed = 0;
+    } else if (!frozen && in.joystick) {
+        // Joystick drive (0x541410): k = floor(Y/10)/100, opposite direction brakes x4.
+        car.motorRunning = true;
+        const float steps = std::floor(std::clamp(in.joyY, -100.0f, 100.0f) / 10.0f);
+        const float k = steps / 100.0f;
+        car.speed += in.joyY * car.speed < 0 ? 4 * k : k;
+        if (steps == 0) car.speed *= 0.993f;
+        if (in.brake) {
+            if (std::abs(car.speed) < 0.1f) car.speed = 0;
+            else if (car.speed < 0) car.speed += 5 * A;
+            else car.speed -= 5 * A;
+        }
     } else if (!frozen) {
         if (in.down || in.brake) {
             car.motorRunning = true;

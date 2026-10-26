@@ -121,3 +121,73 @@ SmdModel parse_smd(std::string_view text) {
 }
 
 }  // namespace tto
+
+#include <cmath>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <unordered_map>
+
+namespace tto {
+namespace {
+
+glm::mat4 bone_local(const SmdBonePose& p) {
+    glm::mat4 m = glm::translate(glm::mat4(1), {p.pos[0], p.pos[1], p.pos[2]});
+    m = glm::rotate(m, p.rot[2], {0, 0, 1});
+    m = glm::rotate(m, p.rot[1], {0, 1, 0});
+    m = glm::rotate(m, p.rot[0], {1, 0, 0});
+    return m;
+}
+
+std::vector<glm::mat4> world_matrices(const std::vector<SmdBone>& bones, const std::vector<SmdBonePose>& pose) {
+    std::vector<glm::mat4> w(bones.size(), glm::mat4(1));
+    std::unordered_map<int, std::size_t> byId;
+    for (std::size_t i = 0; i < bones.size(); ++i) byId[bones[i].id] = i;
+    // Parents precede children in studiomdl files; resolve in order, falling back to a second pass.
+    std::vector<bool> done(bones.size(), false);
+    for (int pass = 0; pass < 2; ++pass)
+        for (std::size_t i = 0; i < bones.size(); ++i) {
+            if (done[i]) continue;
+            const glm::mat4 l = i < pose.size() ? bone_local(pose[i]) : glm::mat4(1);
+            const auto it = byId.find(bones[i].parent);
+            if (bones[i].parent < 0 || it == byId.end()) {
+                w[i] = l;
+                done[i] = true;
+            } else if (done[it->second]) {
+                w[i] = w[it->second] * l;
+                done[i] = true;
+            }
+        }
+    return w;
+}
+
+}  // namespace
+
+Mesh smd_pose(const SmdModel& ref, const SmdModel& anim, std::size_t frame) {
+    Mesh out = ref.mesh;
+    if (ref.frames.empty() || anim.frames.empty() || out.objects.empty()) return out;
+    frame = std::min(frame, anim.frames.size() - 1);
+    const auto refW = world_matrices(ref.bones, ref.frames[0]);
+    // Animation pose remapped onto the reference skeleton by bone name.
+    std::vector<SmdBonePose> pose = ref.frames[0];
+    for (std::size_t i = 0; i < ref.bones.size(); ++i)
+        for (std::size_t k = 0; k < anim.bones.size(); ++k)
+            if (anim.bones[k].name == ref.bones[i].name && k < anim.frames[frame].size()) pose[i] = anim.frames[frame][k];
+    const auto animW = world_matrices(ref.bones, pose);
+    std::unordered_map<int, std::size_t> byId;
+    for (std::size_t i = 0; i < ref.bones.size(); ++i) byId[ref.bones[i].id] = i;
+    std::vector<glm::mat4> skin(ref.bones.size());
+    for (std::size_t i = 0; i < skin.size(); ++i) skin[i] = animW[i] * glm::inverse(refW[i]);
+    MeshObject& o = out.objects[0];
+    for (std::size_t v = 0; v < o.positions.size() && v < ref.vertexBone.size(); ++v) {
+        const auto it = byId.find(ref.vertexBone[v]);
+        if (it == byId.end()) continue;
+        const glm::mat4& M = skin[it->second];
+        const glm::vec4 p = M * glm::vec4(o.positions[v][0], o.positions[v][1], o.positions[v][2], 1);
+        const glm::vec3 n = glm::mat3(M) * glm::vec3(o.normals[v][0], o.normals[v][1], o.normals[v][2]);
+        o.positions[v] = {p.x, p.y, p.z};
+        o.normals[v] = {n.x, n.y, n.z};
+    }
+    return out;
+}
+
+}  // namespace tto

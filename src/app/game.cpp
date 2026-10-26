@@ -55,12 +55,13 @@ void App::start_map(int index) {
 
 void App::load_map(int index) {
     const MapData& m = maps_.at(static_cast<std::size_t>(index - 1));
-    scene_ = std::make_unique<Scene>(r_, *fs_, cfg_);
-    scene_->load_map(m);
-    scene_->load_cars();
+    scene_ = std::make_unique<Scene>(*r_, *fs_, cfg_);
+    scene_->load_map(m, rng_);
+    scene_->load_cars(rng_);
     scene_->load_people();
     Sim::Config sc;
     sc.seed = static_cast<unsigned>(rng_());
+    sc.pedColors = scene_->people_colors();
     sim_ = std::make_unique<Sim>(m, scene_->car_params(), scene_->car_colors(rng_), sc);
     scene_->set_camera_mode(1);  // observed first view under Wine is the chase camera ([RT], DRIVING.md §6 check 1)
     answeredSigns_.clear();
@@ -90,6 +91,13 @@ DriveInput App::drive_input() const {
     in.left = keys_[2];
     in.right = keys_[3];
     in.brake = keys_[4];
+    if (joyMode_ && joy_) {
+        auto pct = [&](int axis) { return static_cast<float>(SDL_GetJoystickAxis(joy_, axis)) * 100.0f / 32767.0f; };
+        in.joystick = true;
+        in.joyX = pct(0);
+        in.joyY = pct(1);
+        in.brake = in.brake || SDL_GetJoystickButton(joy_, 0);
+    }
     return in;
 }
 
@@ -100,7 +108,17 @@ void App::game_update(double dt) {
         speechUntil_ = gameTime_ + speech(pendingDir_, pendingFile_);
         pendingFile_.clear();
     }
-    const bool talking = gameTime_ < speechUntil_ || !pendingFile_.empty();
+    if (cutscene_ && gameTime_ >= speechUntil_) {
+        if (!cutClips_.empty()) {
+            const auto [dir, file] = cutClips_.front();
+            cutClips_.erase(cutClips_.begin());
+            speechUntil_ = gameTime_ + speech(dir, file);
+        } else {
+            cutscene_ = false;  // queue empty: stop the video and hide the panel
+            stop_movie();
+        }
+    }
+    const bool talking = gameTime_ < speechUntil_ || !pendingFile_.empty() || cutscene_;
     if (!talking && resumeAfterSpeech_) {
         resumeAfterSpeech_ = false;
         arrowSign_.reset();
@@ -130,6 +148,8 @@ void App::game_update(double dt) {
     if (sim_->hornSounds != horn0)
         if (auto p = fs_->find("Arabalar\\korna.wav")) audio_.play(audio_.load(*p));
     scene_->update_camera(*sim_, dt);
+    if (!sim_->paused()) scene_->update(dt);
+    world_sounds();
     if (engine_) {
         // Engine pitch bands (DRIVING.md §8): base 0/20/40 km/h, 300 Hz per km/h over 11500 Hz.
         const float kmh = sim_->player().body->kmh();
@@ -145,10 +165,11 @@ void App::game_key(SDL_Keycode k, bool down) {
     if (idx >= 0) keys_[idx] = down;
     if (!down || screen_ != Screen::Game) return;
     if (reportVisible_) {
+        if (cutscene_) return;
         if (k == SDLK_RETURN || k == SDLK_KP_ENTER) close_report();
         return;
     }
-    if (gameTime_ < speechUntil_ || panel_.open) return;  // ignored while talking or while a question is open
+    if (gameTime_ < speechUntil_ || panel_.open || cutscene_) return;  // ignored while talking, a question or a video panel
     switch (k) {
         case SDLK_SPACE:
             if (!menuMode_) {
@@ -164,6 +185,14 @@ void App::game_key(SDL_Keycode k, bool down) {
         case SDLK_F2: showF2_ = !showF2_; break;
         case SDLK_F3: showF3_ = !showF3_; break;
         case SDLK_H: sim_->horn(); break;
+        case SDLK_T:  // "Öndeki Taşıta Geç": drive the car ahead once the map's points are reached (not police/ambulance)
+            if (!sim_->paused() && sim_->rules().score() >= required_) sim_->take_over_ahead();
+            break;
+        case SDLK_Y: sim_->take_over(kPlayerType - 1); break;  // "Afacan'a Geç"
+        case SDLK_J:  // joystick / keyboard toggle (0x52e5cf)
+            joyMode_ = !joyMode_;
+            sim_->rules().notice(joyMode_ ? exe_->ansi_or(0x52ea78, "Joystick Modu Açık") : exe_->ansi_or(0x52ea94, "Klavye Modu Açık"), sim_->wall());
+            break;
         case SDLK_C: sim_->toggle_signal(true); break;
         case SDLK_V: sim_->toggle_signal(false); break;
         case SDLK_K: if (!sim_->paused()) scene_->cycle_camera(true); break;
@@ -173,14 +202,19 @@ void App::game_key(SDL_Keycode k, bool down) {
             if (radio_) {
                 radio_.reset();
             } else if (!playlist_.empty()) {
-                if (auto p = fs_->find(playlist_[static_cast<std::size_t>(radioTrack_) % playlist_.size()])) radio_ = audio_.loop(audio_.load(*p), 0.4f);
+                if (auto p = track_path(playlist_[static_cast<std::size_t>(radioTrack_) % playlist_.size()])) radio_ = audio_.loop(audio_.load(*p), radioGain_);
             }
             break;
         case SDLK_N:
             if (!playlist_.empty()) {
                 radioTrack_ = (radioTrack_ + 1) % static_cast<int>(playlist_.size());
-                if (auto p = fs_->find(playlist_[static_cast<std::size_t>(radioTrack_)])) radio_ = audio_.loop(audio_.load(*p), 0.4f);
+                if (auto p = track_path(playlist_[static_cast<std::size_t>(radioTrack_)])) radio_ = audio_.loop(audio_.load(*p), radioGain_);
             }
+            break;
+        case SDLK_Z:  // radio volume up / down (0x52e7df / 0x52e7f9)
+        case SDLK_X:
+            radioGain_ = std::clamp(radioGain_ + (k == SDLK_Z ? 0.1f : -0.1f), 0.0f, 1.0f);
+            if (radio_) radio_->set_gain(radioGain_);
             break;
         default: break;
     }
@@ -212,6 +246,7 @@ void App::game_click(glm::vec2 hud, glm::vec2) {
     const auto pk = scene_->pick(*sim_, hud.x, hud.y, 800, 600);
     if (pk.sign >= 0) open_sign_question(pk.sign);
     else if (pk.car >= 0) open_violator_question(pk.car);
+    else if (pk.ped >= 0) open_pedestrian_question(pk.ped);
 }
 
 void App::open_sign_question(int sign) {
@@ -273,6 +308,79 @@ void App::open_violator_question(int car) {
     }
 }
 
+void App::open_pedestrian_question(int ped) {
+    // 0x532c5c pedestrian branch: a red/yellow light governs the pedestrian and differs from the latched one.
+    const int light = sim_->pedestrian_violation(ped);
+    Pedestrian& p = sim_->pedestrians().at(static_cast<std::size_t>(ped));
+    if (light < 0 || light == p.latchedLight) return;
+    p.latchedLight = light;
+    const std::string ans[3] = {exe_->short_or(0x532f80, "Bu yaya kırmızı ışıkta geçti."),
+                                exe_->short_or(0x532fa0, "Bu yaya karşıdan karşıya geçerken koşuyordu."),
+                                exe_->short_or(0x532fd0, "Yaya etrafa çöp attı.")};
+    panel_ = {};
+    panel_.open = true;
+    panel_.kind = Panel::Violator;
+    panel_.violator = Rules::PedestrianRed;
+    panel_.group = 3;
+    panel_.question = std::format("Soru :  (+{})", panel_.group * 20);
+    const int perm = std::uniform_int_distribution<int>(0, 5)(rng_);
+    static const char* pre[3] = {"a ) ", "b ) ", "c ) "};
+    for (int i = 0; i < 3; ++i) {
+        const int k = kPermutations[static_cast<std::size_t>(perm)][static_cast<std::size_t>(i)];
+        panel_.lines.push_back(pre[i] + ans[k]);
+        panel_.tags.push_back(k + 1);
+    }
+}
+
+void App::world_sounds() {
+    // Volumes are DirectSound 1/100 dB: gain = 10^(-k*d/2000).
+    auto gain = [](float k, float d) { return std::pow(10.0f, -k * d / 2000.0f); };
+    auto loop = [&](std::unique_ptr<Audio::Voice>& v, const char* file, bool on, float g) {
+        if (!on) {
+            v.reset();
+            return;
+        }
+        if (!v || !v->playing())
+            if (auto p = fs_->find(file)) v = audio_.loop(audio_.load(*p), g);
+        if (v) v->set_gain(sim_->paused() ? 0.0f : g);
+    };
+    const glm::vec3 cam = scene_->camera_pos();
+    // Sirens (Arabalar\ambulans.wav / polis.wav): nearest siren car within 45 m (0x5429a4 tail).
+    int best = -1;
+    float bestD = 45;
+    for (std::size_t i = 0; i < sim_->cars().size(); ++i) {
+        const Car& c = sim_->cars()[i];
+        if (!c.active || !c.siren) continue;
+        const float d = glm::length(c.body->position() - cam);
+        if (d < bestD) bestD = d, best = static_cast<int>(i);
+    }
+    if (best != sirenCar_) siren_.reset();
+    sirenCar_ = best;
+    loop(siren_, best >= 0 && sim_->cars()[static_cast<std::size_t>(best)].type == 12 ? "Arabalar\\ambulans.wav" : "Arabalar\\polis.wav", best >= 0,
+         gain(100, std::max(bestD, 1.0f)) * 2.0f);
+    // Train (sesler\Tren.wav): XZ distance to the train segment, silent beyond 90 m, -60 dB/100 per m.
+    float td = 1e9f;
+    if (sim_->has_train() && sim_->train().running) {
+        const glm::vec3 t = sim_->train_pos();
+        const float z = std::clamp(cam.z, t.z - 28, t.z + 28);
+        td = std::max(4.0f, glm::length(glm::vec2(cam.x - t.x, cam.z - z)));
+    }
+    loop(trainSnd_, "sesler\\Tren.wav", td <= 90, gain(60, td) * 2.0f);
+    // Level-crossing bell (sesler\DingDing.wav) while a boom moves, <= 45 m, -50 dB/100 per m (min 3).
+    float bd = 1e9f;
+    for (const auto& x : sim_->crossings())
+        if (x.moving) bd = std::min(bd, std::max(3.0f, glm::length(x.pos - cam)));
+    loop(bell_, "sesler\\DingDing.wav", bd <= 45, gain(50, bd) * 2.0f);
+    // Kasaba water (sesler\Su.wav): distance from the line near the origin ~ |camera.z| [G], silent beyond 50 m.
+    const float wd = std::max(4.0f, std::abs(cam.z));
+    loop(water_, "sesler\\Su.wav", mapIndex_ == 2 && wd <= 50, gain(60, wd) * 2.0f);
+    // Every 5th "Dikkat Yayaya Öncelik Tanı" plays sesler\yaya.wav (0x509304).
+    if (sim_->pedYieldSounds != lastYieldSnd_) {
+        lastYieldSnd_ = sim_->pedYieldSounds;
+        if (auto p = fs_->find("sesler\\yaya.wav")) audio_.play(audio_.load(*p));
+    }
+}
+
 void App::open_menu_question(bool esc) {
     menuMode_ = true;
     sim_->set_paused(true);
@@ -305,14 +413,20 @@ void App::answer(int tag) {
                 reportText_ = r.report(session_total());
                 reportVisible_ = true;
             } else {
-                log_info("game finished: key {} total {}", score_key(session_total()), session_total());
+                // ShellExecute open ".../toyotatrafikoyunu.aspx?puan=" + key (the site is defunct), then exit to the menu.
+                const std::string key = score_key(session_total());
+                log_info("game finished: key {} total {}", key, session_total());
+                SDL_OpenURL(("http://turkiye.toyotasa.com.tr/toyotatrafikoyunu.aspx?puan=" + key).c_str());
+                keyPanel_ = false;
                 exit_to_menu();
             }
         } else if (tag == 2) {
+            keyPanel_ = false;
             if (sim_->time() >= timeLimit_) sim_->reset_clock();
             menuMode_ = false;
             sim_->set_paused(false);
         } else if (tag == 3) {
+            keyPanel_ = false;
             exit_to_menu();
         }
         return;
@@ -347,7 +461,7 @@ void App::map_end() {
         r.set_score(0);
         answeredSigns_.clear();
         sim_->reset_clock();
-        speechUntil_ = gameTime_ + speech_random("puan_toplayamama", 't', 5);
+        start_cutscene(1, "puan_toplayamama", 't');
         reportTarget_ = mapIndex_;
         reportText_ = r.report(session_total());
         reportVisible_ = true;
@@ -358,7 +472,9 @@ void App::map_end() {
     log_info("map {} passed with {} points", mapIndex_, r.score());
     static const char* dirs[5] = {"", "ilk_etabi_gecme", "ikinci_etabi_gecme", "", "oyun_bitirme"};
     static const char pre[5] = {0, 'i', 'h', 0, 'f'};
-    if (pre[mapIndex_]) speechUntil_ = gameTime_ + speech_random(dirs[mapIndex_], pre[mapIndex_], 5);
+    if (mapIndex_ == 2 || mapIndex_ == 4) start_cutscene(mapIndex_ == 2 ? 4 : 7, dirs[mapIndex_], pre[mapIndex_]);
+    else if (pre[mapIndex_]) speechUntil_ = gameTime_ + speech_random(dirs[mapIndex_], pre[mapIndex_], 5);
+    if (mapIndex_ == 4 && to_lower_ascii(cfg_.text("Logo", "True")) != "false") keyPanel_ = true;
     if (profile_ && mapIndex_ < 4 && profile_->unlocked() < mapIndex_ + 1) {
         profile_->set_unlocked(mapIndex_ + 1);
         save_profile();
@@ -367,6 +483,24 @@ void App::map_end() {
     sim_->set_paused(true);
     if (mapIndex_ == 3) open_menu_question(false);
     else menuAfterSpeech_ = true;
+}
+
+void App::start_cutscene(int firstK, const std::string& speechDir, char speechPrefix) {
+    // MapEnd 0x530770: speech clip, then a random car's dialogue clip and the Yaris reply, while
+    // Video\<car>_yaris[_L].mpg plays in the cutscene panel; non-Logo builds use "<car>4ls"/"7ls".
+    static const char* carNames[3] = {"camry", "rav4", "sedan"};
+    const std::string car = carNames[std::uniform_int_distribution<int>(0, 2)(rng_)];
+    const bool logo = to_lower_ascii(cfg_.text("Logo", "True")) != "false";
+    const int k = firstK + std::uniform_int_distribution<int>(0, 2)(rng_);
+    const int ky = firstK + std::uniform_int_distribution<int>(0, 2)(rng_);
+    cutClips_.clear();
+    cutClips_.push_back({"sesler\\" + speechDir, std::format("{}{:03}.wav", speechPrefix, std::uniform_int_distribution<int>(1, 5)(rng_))});
+    const bool ls = !logo && (firstK == 4 || firstK == 7);
+    cutClips_.push_back({"Video\\" + car, car + (ls ? std::to_string(firstK) + "ls" : std::to_string(k)) + ".wav"});
+    cutClips_.push_back({"Video\\yaris", "yaris" + (ls && firstK == 7 ? std::string("7ls") : std::to_string(ky)) + ".wav"});
+    start_movie("Video\\" + car + (logo ? "_yaris_L.mpg" : "_yaris.mpg"), false);  // speech still plays without video
+    cutscene_ = true;
+    speechUntil_ = gameTime_;  // the queue starts on the next update
 }
 
 void App::close_report() {
@@ -387,8 +521,13 @@ void App::exit_to_menu() {
     sim_.reset();
     engine_.reset();
     radio_.reset();
+    siren_.reset();
+    trainSnd_.reset();
+    bell_.reset();
+    water_.reset();
     panel_ = {};
     menuMode_ = false;
+    keyPanel_ = false;
     goto_screen(Screen::Main);
     play_music("sesler\\trafik_ses2.mp3");
 }
@@ -479,11 +618,11 @@ void App::game_draw() {
         if (scene_ && screenTime_ >= loadingUntil_) goto_screen(Screen::Game);
         return;
     }
-    scene_->draw(*sim_, vw_, vh_, arrowSign_);
-    r_.begin_2d(800, 600);
+    scene_->draw(*sim_, vw_, vh_, arrowSign_, gameTime_ < speechUntil_);
+    r_->begin_2d(800, 600);
     const Rules& r = sim_->rules();
     if (reportVisible_) {
-        if (const Texture* t = image("maps\\Cerceve.jpg")) r_.quad(0, 0, 800, 600, t);
+        if (const Texture* t = image("maps\\Cerceve.jpg")) r_->quad(0, 0, 800, 600, t);
         text_.draw_lines(reportText_, 30, 25, F::Hud, kRapor, 0, 23, true);
     }
     const int el = static_cast<int>(sim_->time());
@@ -515,7 +654,7 @@ void App::game_draw() {
         const auto q = wrap60(panel_.question);
         const auto rects = panel_line_rects();
         float y = rects.empty() ? 300 : rects[0].y - kLine * static_cast<float>(q.size());
-        r_.quad(20, y - 6, 600, kLine * static_cast<float>(q.size() + panel_.lines.size()) + 12, nullptr, {0, 0, 0, 0.45f});
+        r_->quad(20, y - 6, 600, kLine * static_cast<float>(q.size() + panel_.lines.size()) + 12, nullptr, {0, 0, 0, 0.45f});
         for (const auto& l : q) {
             text_.draw_shadowed(l, 30, y, F::Hud, kHud);
             y += kLine;
@@ -527,6 +666,18 @@ void App::game_draw() {
         }
     }
     if (sim_->paused() && !panel_.open && !reportVisible_ && !menuMode_) text_.draw_shadowed("||", 400, 280, F::Huge, kHud, 2);
+    if (keyPanel_ && !reportVisible_) {
+        const int T = session_total();
+        const std::string t = "Anahtar = " + score_key(T) + "\nToplam Puanın = " + std::to_string(T) +
+                              "\n\nTebrikler! Tüm kuralları uygulayıp yeterli\npuanları topladın. Şimdi yukarıda yazan\nanahtar kelimeni not edip \n"
+                              "http://turkiye.toyotasa.com.tr/toyotatrafikoyunu.aspx\ninternet adresinde uygun bölüme girip puanını kaydedebilir,\n"
+                              "sıralamada üst sıralarda yer alırsan ToyotaSA'dan sürpriz\narmağanlar kazanabilirsin.";
+        text_.draw_lines(t, 400, 60, F::Hud, kYellow, 2, 22, true);
+    }
+    if (cutscene_ && movie_.active) {
+        r_->quad(0, 0, 800, 600, nullptr, {0, 0, 0, 1});
+        draw_movie(80, 60, 640, 480);
+    }
 }
 
 }  // namespace tto

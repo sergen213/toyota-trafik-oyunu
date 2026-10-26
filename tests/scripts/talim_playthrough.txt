@@ -53,6 +53,9 @@ log sign question flow done
 wait 12
 shot 12_after_sign
 until report 300
+expect cutscene
+shot 12b_cutscene
+until nocutscene 60
 shot 13_report
 key enter
 wait 1

@@ -11,17 +11,28 @@
 
 ## Native program
 
-The program is C++23, built with CMake + Ninja. It is 2D/3D but lightweight: the original is a low-poly
-fixed-function GLScene game, so the renderer is OpenGL 3.3 core. Vulkan was not chosen because it would add
-complexity without visual benefit at this fidelity (goal.txt §8 allows this choice for lightweight games).
+The program is C++23, built with CMake + Ninja. The renderer is an immediate-mode interface (`render/renderer.hpp`)
+with two backends, selected at start (`--renderer auto|vulkan|gl`):
+
+- **Vulkan 1.3** (default, `render/vk.cpp`): dynamic rendering, bindless textures, 4× MSAA. Draw calls are recorded
+  and replayed at `end_window`, so each frame can build a TLAS from its own instances first. Optional extras the
+  original never had: **ray-traced sun shadows** (`VK_KHR_ray_query`, F9), **AMD FSR 3.1.4 upscaling** (`--fsr`, F10)
+  with per-object motion vectors (`DrawOpts::id`), and **FSR 3.1.4 frame generation** (`--framegen`, F8), which
+  presents an interpolated frame (with the current HUD) before every rendered one. FSR comes from the vendored
+  FidelityFX SDK v1.1.4 subset (`third_party/FidelityFX-SDK`, MIT) and the `render/fsr.*` wrapper, both taken from
+  the IKV Linux port; shaders are compiled by `tools/ffx_fsr3_blobs.py` with glslc.
+- **OpenGL 3.3 core** (`render/gl.cpp`): fallback when Vulkan is missing; same look without the extras.
+
+Default output keeps the original look (no FSR, no frame generation); ray-traced shadows are on when supported and
+can be switched off with `--no-rt`.
 
 ```
 src/core      fs (case-insensitive Windows paths, CP1254), log
 src/formats   3DS, SMD, Delphi DFM/PE resources            ┐
 src/data      HG.vdd, SoruBank, UserData, maps.json, validator ├─ tto_core (no SDL/GL; unit-tested)
-src/game      ODE car (TGLOXDynCar port), traffic sim, rules, quiz ┘
-src/render    OpenGL renderer, images (stb), text (SDL3_ttf + fontconfig)
-src/platform  audio (SDL3 streams, mpg123)
+src/game      ODE car, traffic sim, map actors (world.cpp), rules, quiz ┘
+src/render    Renderer interface, Vulkan (+RT, FSR 3.1.4) and OpenGL backends, images (stb), text (SDL3_ttf)
+src/platform  audio (SDL3 streams, mpg123), video (FFmpeg: Indeo 4.1 intro, MPEG-1 cutscenes)
 src/app       App lifecycle + script runner, menu (TGirisForm), game (TFormOyun), scene drawing
 ```
 

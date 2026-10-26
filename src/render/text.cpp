@@ -58,7 +58,7 @@ void TextRenderer::shutdown() {
 }
 
 void TextRenderer::flush_cache() {
-    for (auto& [k, e] : cache_) glDeleteTextures(1, &e.tex.id);
+    for (auto& [k, e] : cache_) r_->destroy_texture(e.tex);
     cache_.clear();
 }
 
@@ -82,18 +82,7 @@ const Texture* TextRenderer::get(const std::string& s, Font f) {
                     static_cast<std::uint8_t*>(rgba->pixels) + static_cast<std::size_t>(y) * rgba->pitch,
                     static_cast<std::size_t>(img.w) * 4);
     SDL_DestroySurface(rgba);
-    Texture t;
-    glGenTextures(1, &t.id);
-    glBindTexture(GL_TEXTURE_2D, t.id);
-    // Upload bottom-up so Renderer::quad's top-down UV flip shows it upright.
-    std::vector<std::uint8_t> fl(img.rgba.size());
-    const std::size_t row = static_cast<std::size_t>(img.w) * 4;
-    for (int y = 0; y < img.h; ++y) std::memcpy(fl.data() + y * row, img.rgba.data() + (img.h - 1 - y) * row, row);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.w, img.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, fl.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    Texture t = r_->create_texture(img, false);
     t.w = img.w;
     t.h = img.h;
     t.hasAlpha = true;

@@ -38,3 +38,26 @@ TEST(Smd, ReportsMalformedLines) {
     EXPECT_THROW(parse_smd("version 1\nskeleton\n 0 0 0 0 0 0 0\nend\n"), std::runtime_error);
     EXPECT_THROW(parse_smd("version 1\nbogus\n"), std::runtime_error);
 }
+
+TEST(Smd, PoseSkinsVerticesByBoneName) {
+    // Bone "arm" (child of root) rotated 90 degrees about Z in the animation moves its vertex
+    // (1,0,0) relative to the bone origin (0,0,1) to (0,1,0)+origin; root-bound vertices stay.
+    const char* ref =
+        "version 1\nnodes\n  0 \"root\" -1\n  1 \"arm\" 0\nend\n"
+        "skeleton\ntime 0\n  0 0 0 0 0 0 0\n  1 0 0 1 0 0 0\nend\n"
+        "triangles\nt.bmp\n  0 5 0 0 0 0 1 0 0\n  1 1 0 1 1 0 0 0 0\n  1 0 0 1 0 0 1 0 0\nend\n";
+    const char* anim =
+        "version 1\nnodes\n  0 \"other_root\" -1\n  1 \"arm\" 0\nend\n"
+        "skeleton\ntime 0\n  0 9 9 9 0 0 0\n  1 0 0 1 0 0 1.5707963\nend\n";
+    const SmdModel r = parse_smd(ref), a = parse_smd(anim);
+    const Mesh m = smd_pose(r, a, 0);
+    const auto& p = m.objects[0].positions;
+    EXPECT_NEAR(p[0][0], 5, 1e-5);  // root bone not in the animation: unchanged
+    EXPECT_NEAR(p[1][0], 0, 1e-5);
+    EXPECT_NEAR(p[1][1], 1, 1e-5);
+    EXPECT_NEAR(p[1][2], 1, 1e-5);
+    EXPECT_NEAR(m.objects[0].normals[1][1], 1, 1e-5);  // normal rotated with the bone
+    const Mesh same = smd_pose(r, r, 0);
+    for (std::size_t i = 0; i < p.size(); ++i)
+        for (int k = 0; k < 3; ++k) EXPECT_NEAR(same.objects[0].positions[i][k], r.mesh.objects[0].positions[i][k], 1e-5);
+}

@@ -20,7 +20,8 @@
 #include "game/quiz.hpp"
 #include "game/traffic.hpp"
 #include "platform/audio.hpp"
-#include "render/gl.hpp"
+#include "platform/video.hpp"
+#include "render/renderer.hpp"
 #include "render/text.hpp"
 
 namespace tto {
@@ -34,6 +35,10 @@ struct Options {
     bool fixedStep = false;         // simulate 1/60 s per frame regardless of real time (tests)
     bool mute = false;
     bool fullscreen = false;
+    std::string renderer = "auto";  // auto | vulkan | gl
+    bool rayTracing = true;          // Vulkan ray-query shadows when supported
+    int fsr = -1;                    // AMD FSR 3.1.4 quality (-1 off, 0 native AA .. 4 ultra performance)
+    bool frameGen = false;           // FSR 3.1.4 frame generation (needs fsr >= 0)
     int width = 1024, height = 768;
     unsigned seed = 0;  // 0 = random
 };
@@ -44,7 +49,7 @@ public:
     ~App();
     int run();  // 0 = normal quit, 1 = init failure, 3 = script expectation failed
 
-    enum class Screen { Title, Help, DriverList, NewDriver, Main, MapSelect, Loading, Game };
+    enum class Screen { Title, Help, DriverList, NewDriver, Main, MapSelect, Loading, Game, Playlist };
 
 private:
     // ---- lifecycle (app.cpp)
@@ -65,6 +70,24 @@ private:
     void menu_wheel(float dy);
     void goto_screen(Screen s);
     void start_quiz();
+    // Music list editor (TfrmPlaylister 0x5147a4..0x514bb4), saved to <save dir>/playlist.m3u.
+    void playlist_open();
+    void playlist_draw();
+    void playlist_click(glm::vec2 p, bool dbl);
+    void playlist_wheel(float dy);
+    void playlist_load();
+    bool playlist_save();
+    std::optional<std::filesystem::path> track_path(const std::string& entry) const;
+    struct PlEditor {
+        std::filesystem::path dir;
+        std::vector<std::string> dirs, files;  // ".." first in dirs
+        std::vector<std::string> list;          // edited copy of playlist_
+        int dirSel = -1, fileSel = -1, listSel = -1;
+        float dirScroll = 0, fileScroll = 0, listScroll = 0;
+        double lastClick = -1;
+        glm::vec2 lastPos{0};
+        void scan();
+    } pl_;
     void quiz_click(int line);
     std::optional<glm::vec4> quiz_line_rect(int line) const;  // logical rect of answer line 0..2
     void try_start_map(int map);
@@ -86,6 +109,8 @@ private:
     void map_end();
     void open_sign_question(int sign);
     void open_violator_question(int car);
+    void open_pedestrian_question(int ped);
+    void world_sounds();
     void open_menu_question(bool esc);
     void answer(int tag);
     void close_report();
@@ -93,6 +118,24 @@ private:
     int session_total() const;
     std::vector<glm::vec4> panel_line_rects() const;  // HUD rects of the question panel lines
     DriveInput drive_input() const;
+
+    // ---- videos (app.cpp): menu intro clip and in-game cutscenes (FFmpeg)
+    struct Movie {
+        Video video;
+        Texture tex;
+        Image img;
+        double t = 0;
+        bool active = false;
+        std::unique_ptr<Audio::Voice> audio;
+    } movie_;
+    bool start_movie(const std::string& winPath, bool withAudio);
+    void movie_tick(double dt);
+    void stop_movie();
+    void draw_movie(float x, float y, float w, float h);
+    // Cutscene (TFormOyun+0x214): the video plays while its queued speech clips play (TimerUyari 0x50a7e4).
+    bool cutscene_ = false;
+    std::vector<std::pair<std::string, std::string>> cutClips_;
+    void start_cutscene(int firstK, const std::string& speechDir, char speechPrefix);
 
     // ---- script (app.cpp)
     void load_script();
@@ -118,7 +161,7 @@ private:
     std::vector<MapData> maps_;
     std::unique_ptr<ExeStrings> exe_;
     DfmObject giris_;  // TGirisForm layout from the user's executable
-    Renderer r_;
+    std::unique_ptr<Renderer> r_;
     TextRenderer text_;
     Audio audio_;
     std::map<std::string, const Texture*> glyphs_;
@@ -164,6 +207,7 @@ private:
     double timeLimit_ = 240;
     int required_ = 150;
     bool showF1_ = false, showF2_ = false, showF3_ = true;
+    bool keyPanel_ = false;  // GLHUDTextSifre: map 4 passed with the Logo flag
     bool reportVisible_ = false;
     std::string reportText_;
     int reportTarget_ = 0;
@@ -188,11 +232,16 @@ private:
     int autoFrom_ = -1, autoTo_ = -1;
     void autodrive_step();
     bool resumeAfterSpeech_ = false, menuAfterSpeech_ = false;
-    std::unique_ptr<Audio::Voice> engine_, radio_;
+    std::unique_ptr<Audio::Voice> engine_, radio_, siren_, trainSnd_, bell_, water_;
+    int sirenCar_ = -1, lastYieldSnd_ = 0;
+    float radioGain_ = 0.4f;
     int radioTrack_ = 0;
     std::vector<std::string> playlist_;
     int lastCrash_ = 0, lastHorn_ = 0;
     bool menuMode_ = false;
+    // Joystick mode ('j', TJoystick 0x4fc6cc): axes in percent, button 1 brake, button 2 pause.
+    SDL_Joystick* joy_ = nullptr;
+    bool joyMode_ = false;
     bool keys_[8] = {};  // up, down, left, right, f, space
 
     // ---- script

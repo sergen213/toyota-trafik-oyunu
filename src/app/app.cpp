@@ -1,7 +1,5 @@
 #include "app/app.hpp"
 
-#include <GL/glew.h>
-
 #include <algorithm>
 #include <charconv>
 #include <cstdlib>
@@ -15,17 +13,20 @@ namespace tto {
 App::App(Options o) : opt_(std::move(o)), rng_(opt_.seed ? opt_.seed : std::random_device{}()) {}
 
 App::~App() {
+    stop_movie();
     scene_.reset();
     sim_.reset();
     music_.reset();
     engine_.reset();
     radio_.reset();
-    if (gl_) {
+    if (r_) {
         text_.shutdown();
-        r_.shutdown();
+        r_->shutdown();
+        r_.reset();
     }
     audio_.shutdown();
     if (gl_) SDL_GL_DestroyContext(gl_);
+    if (joy_) SDL_CloseJoystick(joy_);
     if (win_) SDL_DestroyWindow(win_);
     SDL_Quit();
 }
@@ -61,41 +62,63 @@ bool App::init() {
         log_warn("profiles ignored: {}", e.what());
     }
 
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK)) {
         log_error("SDL_Init: {}", SDL_GetError());
         return false;
     }
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);  // v2 requests aa2xHQ
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 2);
-    SDL_WindowFlags flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
-    if (opt_.fullscreen) flags |= SDL_WINDOW_FULLSCREEN;
-    win_ = SDL_CreateWindow("Cancan ile Toyota Trafik Oyunu", opt_.width, opt_.height, flags);
-    if (!win_) {
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
-        win_ = SDL_CreateWindow("Cancan ile Toyota Trafik Oyunu", opt_.width, opt_.height, flags);
-    }
-    if (!win_ || !(gl_ = SDL_GL_CreateContext(win_))) {
-        log_error("OpenGL 3.3 window: {}", SDL_GetError());
-        return false;
-    }
-    SDL_GL_SetSwapInterval(opt_.fixedStep ? 0 : 1);
-    if (!r_.init() || !text_.init(r_)) return false;
-    if (!opt_.mute) audio_.init();
-    SDL_StartTextInput(win_);
-    log_info("GL {}", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
-
-    if (auto pl = fs_->find("playlist.m3u")) {
-        std::istringstream in(read_text(*pl));
-        for (std::string l; std::getline(in, l);) {
-            if (!l.empty() && l.back() == '\r') l.pop_back();
-            if (!l.empty() && l[0] != '#') playlist_.push_back(cp1254_to_utf8(l));
+    SDL_WindowFlags base = SDL_WINDOW_RESIZABLE;
+    if (opt_.fullscreen) base |= SDL_WINDOW_FULLSCREEN;
+    const char* title = "Cancan ile Toyota Trafik Oyunu";
+    // Vulkan first (ray-query shadows when available), OpenGL 3.3 as the fallback.
+    if (opt_.renderer != "gl") {
+        win_ = SDL_CreateWindow(title, opt_.width, opt_.height, base | SDL_WINDOW_VULKAN);
+        std::string err;
+        if (win_) r_ = make_vk_renderer(win_, !opt_.fixedStep, &err);
+        if (!r_) {
+            log_warn("Vulkan renderer unavailable: {}", err.empty() ? SDL_GetError() : err);
+            if (win_) SDL_DestroyWindow(win_);
+            win_ = nullptr;
+            if (opt_.renderer == "vulkan") return false;
         }
     }
+    if (!r_) {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);  // v2 requests aa2xHQ
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 2);
+        win_ = SDL_CreateWindow(title, opt_.width, opt_.height, base | SDL_WINDOW_OPENGL);
+        if (!win_) {
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+            win_ = SDL_CreateWindow(title, opt_.width, opt_.height, base | SDL_WINDOW_OPENGL);
+        }
+        if (!win_ || !(gl_ = SDL_GL_CreateContext(win_))) {
+            log_error("OpenGL 3.3 window: {}", SDL_GetError());
+            return false;
+        }
+        SDL_GL_SetSwapInterval(opt_.fixedStep ? 0 : 1);
+        r_ = make_gl_renderer();
+        if (!r_) return false;
+    }
+    if (r_->ray_tracing_supported()) r_->set_ray_tracing(opt_.rayTracing);
+    if (opt_.frameGen && opt_.fsr < 0) opt_.fsr = 1;
+    if (r_->upscaler_supported()) r_->set_upscaler(opt_.fsr);
+    else if (opt_.fsr >= 0) log_warn("FSR 3.1.4 needs the Vulkan renderer on a capable GPU; upscaling stays off");
+    if (opt_.frameGen) {
+        if (r_->frame_generation_supported()) r_->set_frame_generation(true);
+        else log_warn("FSR 3.1.4 frame generation unsupported here");
+    }
+    if (!text_.init(*r_)) return false;
+    static const char* fsrNames[] = {"native AA", "quality", "balanced", "performance", "ultra performance"};
+    log_info("renderer {} on {}{}{}{}", r_->name(), r_->device(), r_->ray_tracing() ? " (ray-traced shadows)" : "",
+             r_->upscaler() >= 0 ? std::string(", FSR 3.1.4 ") + fsrNames[r_->upscaler()] : std::string(),
+             r_->frame_generation() ? " + frame generation" : "");
+    if (!opt_.mute) audio_.init();
+    SDL_StartTextInput(win_);
+
+    playlist_load();
     menu_load();
     if (!opt_.script.empty()) load_script();
     return true;
@@ -132,6 +155,43 @@ void App::play_music(const std::string& winPath) {
     if (auto p = fs_->find(winPath)) music_ = audio_.loop(audio_.load(*p), 0.6f);
 }
 
+bool App::start_movie(const std::string& winPath, bool withAudio) {
+    stop_movie();
+    const auto p = fs_->find(winPath);
+    if (!p || !movie_.video.open(*p)) return false;
+    Image black;
+    black.w = movie_.video.width();
+    black.h = movie_.video.height();
+    black.rgba.assign(static_cast<std::size_t>(black.w) * black.h * 4, 0);
+    movie_.tex = r_->create_texture(black, false);
+    movie_.t = 0;
+    movie_.active = true;
+    if (withAudio && audio_.enabled()) {
+        const auto pcm = movie_.video.audio_s16(44100);
+        if (!pcm.empty()) movie_.audio = audio_.start(audio_.from_pcm(p->string() + "#audio", 44100, 2, pcm), 1.0f);
+    }
+    log_info("video {} ({}x{}, {:.1f} s)", winPath, black.w, black.h, movie_.video.duration());
+    movie_tick(0);
+    return true;
+}
+
+void App::movie_tick(double dt) {
+    if (!movie_.active) return;
+    movie_.t += dt;
+    if (movie_.video.frame_at(movie_.t, movie_.img)) r_->update_texture(movie_.tex, movie_.img);
+}
+
+void App::stop_movie() {
+    movie_.audio.reset();
+    if (movie_.tex.id) r_->destroy_texture(movie_.tex);
+    movie_.video.close();
+    movie_.active = false;
+}
+
+void App::draw_movie(float x, float y, float w, float h) {
+    if (movie_.active && movie_.tex.id) r_->quad(x, y, w, h, &movie_.tex);
+}
+
 void App::compute_viewport(int lw, int lh) {
     lw_ = lw;
     lh_ = lh;
@@ -140,7 +200,7 @@ void App::compute_viewport(int lw, int lh) {
     vh_ = std::max(1, static_cast<int>(static_cast<float>(lh) * s));
     vx_ = (w_ - vw_) / 2;
     vy_ = (h_ - vh_) / 2;
-    r_.set_viewport(vx_, vy_, vw_, vh_);
+    r_->set_viewport(vx_, vy_, vw_, vh_);
 }
 
 glm::vec2 App::to_logical(float x, float y) const {
@@ -170,6 +230,23 @@ void App::handle(const SDL_Event& e) {
             if (e.key.key == SDLK_F11) {
                 opt_.fullscreen = !opt_.fullscreen;
                 SDL_SetWindowFullscreen(win_, opt_.fullscreen);
+            } else if (e.key.key == SDLK_F10 && r_->upscaler_supported()) {  // native extra: cycle FSR off/native/quality/../ultra
+                const int q = r_->upscaler() >= 4 ? -1 : r_->upscaler() + 1;
+                r_->set_upscaler(q);
+                static const char* names[] = {"FSR kapalı", "FSR doğal AA", "FSR kalite", "FSR dengeli", "FSR performans", "FSR ultra performans"};
+                log_info("{}", names[q + 1]);
+                if (sim_) sim_->rules().notice(names[q + 1], sim_->wall());
+            } else if (e.key.key == SDLK_F8 && r_->frame_generation_supported()) {  // native extra: FSR frame generation
+                opt_.frameGen = !opt_.frameGen;
+                if (opt_.frameGen && r_->upscaler() < 0) r_->set_upscaler(1);
+                r_->set_frame_generation(opt_.frameGen);
+                const char* t = r_->frame_generation() ? "Kare üretimi açık" : "Kare üretimi kapalı";
+                log_info("{}", t);
+                if (sim_) sim_->rules().notice(t, sim_->wall());
+            } else if (e.key.key == SDLK_F9 && r_->ray_tracing_supported()) {  // native extra: ray-traced shadows on/off
+                r_->set_ray_tracing(!r_->ray_tracing());
+                log_info("ray-traced shadows {}", r_->ray_tracing() ? "on" : "off");
+                if (sim_) sim_->rules().notice(r_->ray_tracing() ? "Işın izlemeli gölgeler açık" : "Işın izlemeli gölgeler kapalı", sim_->wall());
             } else if (screen_ == Screen::Game) {
                 if (!e.key.repeat) game_key(e.key.key, true);
             } else {
@@ -178,6 +255,22 @@ void App::handle(const SDL_Event& e) {
             break;
         case SDL_EVENT_KEY_UP:
             if (screen_ == Screen::Game) game_key(e.key.key, false);
+            break;
+        case SDL_EVENT_JOYSTICK_ADDED:
+            if (!joy_) {
+                joy_ = SDL_OpenJoystick(e.jdevice.which);
+                if (joy_) log_info("joystick: {}", SDL_GetJoystickName(joy_));
+            }
+            break;
+        case SDL_EVENT_JOYSTICK_REMOVED:
+            if (joy_ && SDL_GetJoystickID(joy_) == e.jdevice.which) {
+                SDL_CloseJoystick(joy_);
+                joy_ = nullptr;
+            }
+            break;
+        case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+            // OnJoystickButtonChange (0x530cc0) feeds the KeyDown handler: button 2 toggles pause.
+            if (screen_ == Screen::Game && joyMode_ && e.jbutton.button == 1) game_key(SDLK_SPACE, true), game_key(SDLK_SPACE, false);
             break;
         case SDL_EVENT_TEXT_INPUT:
             if (screen_ != Screen::Game) menu_text(e.text.text);
@@ -189,12 +282,11 @@ void App::handle(const SDL_Event& e) {
 void App::frame(double dt) {
     screenTime_ += dt;
     audio_.update();
+    movie_tick(dt);
+    if (movie_.active && screen_ != Screen::Game && screen_ != Screen::Loading && movie_.t > movie_.video.duration() + 0.1) stop_movie();
     if (screen_ == Screen::Game) game_update(dt);
     SDL_GetWindowSizeInPixels(win_, &w_, &h_);
-    glViewport(0, 0, w_, h_);
-    glDisable(GL_SCISSOR_TEST);
-    glClearColor(0, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    r_->begin_window(w_, h_);
     if (screen_ == Screen::Game || screen_ == Screen::Loading) {
         compute_viewport(800, 600);
         game_draw();
@@ -217,7 +309,8 @@ int App::run() {
         clock_ += dt;
         if (!steps_.empty()) run_script(dt);
         frame(dt);
-        SDL_GL_SwapWindow(win_);
+        r_->end_window();
+        if (gl_) SDL_GL_SwapWindow(win_);
     }
     return exitCode_;
 }
@@ -268,7 +361,7 @@ SDL_Keycode key_by_name(const std::string& n) {
 
 void App::run_script(double) {
     auto cond = [&](const std::string& c) -> bool {
-        static const char* names[] = {"Title", "Help", "DriverList", "NewDriver", "Main", "MapSelect", "Loading", "Game"};
+        static const char* names[] = {"Title", "Help", "DriverList", "NewDriver", "Main", "MapSelect", "Loading", "Game", "Playlist"};
         if (c.starts_with("screen=")) return c.substr(7) == names[static_cast<int>(screen_)];
         if (c == "report") return reportVisible_;
         if (c == "panel") return panel_.open;
@@ -278,6 +371,10 @@ void App::run_script(double) {
         if (c.starts_with("unlocked>=")) return profile_ && profile_->unlocked() >= std::stoi(c.substr(10));
         if (c.starts_with("map=")) return mapIndex_ == std::stoi(c.substr(4));
         if (c == "started") return started_;
+        if (c == "movie") return movie_.active;
+        if (c == "cutscene") return cutscene_;
+        if (c == "nocutscene") return !cutscene_;
+        if (c.starts_with("playlist=")) return static_cast<int>(playlist_.size()) == std::stoi(c.substr(9));
         if (c == "paused") return sim_ && sim_->paused();
         if (c == "idle") return started_ && gameTime_ >= speechUntil_ && pendingFile_.empty();
         return false;
@@ -374,6 +471,40 @@ void App::run_script(double) {
                             scene_->draw(*sim_, vw_, vh_, std::nullopt);  // draw with this view, then capture
                             screenshot(arg(1));
                         }
+            } else if (s.cmd == "cars") {  // test: log active AI cars; "cars shot <name>" views the nearest from above
+                std::string list;
+                int near = -1;
+                float best = 1e9f;
+                const glm::vec3 P = sim_->player().body->position();
+                for (std::size_t i = 0; i < sim_->cars().size(); ++i) {
+                    const Car& c = sim_->cars()[i];
+                    if (!c.active || c.player) continue;
+                    const float d = glm::length(c.body->position() - P);
+                    list += std::format(" {}{}{}{}@{:.0f}m", kVehicleTypes[c.type - 1].key, c.siren ? "(siren)" : "", c.parked ? "(parked)" : "",
+                                        c.unloading ? "(unloading)" : "", d);
+                    if (d < best && (arg(2).empty() || std::stoi(arg(2)) == c.type)) best = d, near = static_cast<int>(i);
+                }
+                log_info("cars:{}", list);
+                if (arg(0) == "shot" && near >= 0) {
+                    const Car& c = sim_->cars()[static_cast<std::size_t>(near)];
+                    const glm::vec3 cp = c.body->position();
+                    scene_->look_at(cp - c.body->forward() * 7.0f + glm::vec3(2.5f, 3.0f, 0), cp);
+                    scene_->draw(*sim_, vw_, vh_, std::nullopt);
+                    screenshot(arg(1));
+                }
+            } else if (s.cmd == "crossing") {  // test: view the first level crossing and the train
+                if (!sim_->crossings().empty()) {
+                    const auto& x = sim_->crossings()[0];
+                    scene_->look_at(x.pos + x.facing * 9.0f + glm::vec3(-3, 3, 0), x.pos);
+                    scene_->draw(*sim_, vw_, vh_, std::nullopt);
+                    screenshot(arg(0));
+                    log_info("crossing closed={} boom={:.0f} train running={} z={:.0f}", x.closed, x.boom, sim_->train().running, sim_->train().z);
+                }
+            } else if (s.cmd == "pldir") {  // test: point the music-list editor at a folder of the game install
+                if (auto d = fs_->find(arg(0))) {
+                    pl_.dir = *d;
+                    pl_.scan();
+                }
             } else if (s.cmd == "label") {
             } else if (s.cmd == "skipif") {
                 if (cond(arg(0))) {
@@ -414,7 +545,7 @@ void App::run_script(double) {
 
 void App::screenshot(const std::string& name) {
     if (opt_.shotDir.empty()) return;
-    Image full = r_.read_pixels(w_, h_);
+    Image full = r_->read_pixels(w_, h_);
     Image img;
     img.w = vw_;
     img.h = vh_;
