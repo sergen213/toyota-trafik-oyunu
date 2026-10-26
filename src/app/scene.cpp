@@ -100,6 +100,8 @@ Scene::Scene(Renderer& r, const GameFs& fs, const VddNode& cfg) : r_(r), fs_(fs)
 }
 
 Scene::~Scene() {
+    for (auto& p : people_)
+        if (p) r_.destroy(*p);
     for (auto& [m, t] : scenery_) r_.destroy(m);
     for (auto& m : owned_) r_.destroy(m);
     for (auto* m : {&lamp_, &signPlate_, &pole_, &litterBox_, &arrow_})
@@ -258,6 +260,27 @@ void Scene::load_cars() {
     }
 }
 
+void Scene::load_people() {
+    static const char* pre[3] = {"a", "k", "ak"};
+    for (int i = 0; i < 15; ++i) {
+        const std::string f = std::string("Insanlar\\") + pre[i / 5] + std::to_string(i % 5 + 1) + ".smd";
+        if (!fs_.find(f)) continue;
+        try {
+            const SmdModel sm = parse_smd(read_text(fs_.need(f)));
+            // Scale the reference pose to 1.75 m tall, feet on the ground (Z-up file -> Y-up world).
+            float zmin = 1e9f, zmax = -1e9f;
+            for (const auto& o : sm.mesh.objects)
+                for (const auto& v : o.positions) zmin = std::min(zmin, v[2]), zmax = std::max(zmax, v[2]);
+            const float sc = zmax > zmin ? 1.75f / (zmax - zmin) : 0.01f;
+            const glm::mat4 bake = glm::translate(glm::mat4(1), {0, -zmin * sc, 0}) * zup_to_yup(sc);
+            people_[static_cast<std::size_t>(i)] =
+                r_.upload(sm.mesh, bake, [&](const std::string& t) { return resolve(t, {"Insanlar", "Arabalar"}); });
+        } catch (const std::exception& e) {
+            log_warn("pedestrian {}: {}", f, e.what());
+        }
+    }
+}
+
 void Scene::cycle_camera(bool next) {
     // 0x532470 / 0x532394 cycle orders (Yaris: 3 is the interior view).
     static const int fwd[] = {1, 2, 3, 4, 5, 7, 8, 10};
@@ -361,6 +384,11 @@ void Scene::draw(Sim& sim, int w, int h, std::optional<int> arrowSign) {
     }
     for (const auto& lt : sim.litter())
         r_.draw(litterBox_, glm::translate(glm::mat4(1), lt.pos * glm::vec3(1, 0, 1) + glm::vec3(0, 0.1f, 0)) * glm::scale(glm::mat4(1), glm::vec3(0.3f, 0.2f, 0.3f)));
+    for (const auto& p : sim.pedestrians()) {
+        if (!p.active || !people_[static_cast<std::size_t>(p.model)]) continue;
+        // Model faces file -Y = world +Z after zup_to_yup; turn it to the walking direction.
+        r_.draw(*people_[static_cast<std::size_t>(p.model)], basis(p.pos, p.dir));
+    }
     const bool blink = static_cast<long>(std::lround(3.0 * now)) % 2 != 0;
     for (const auto& c : sim.cars()) {
         if (!c.active || !c.body) continue;

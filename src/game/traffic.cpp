@@ -71,6 +71,14 @@ Sim::Sim(const MapData& map, const std::vector<CarParams>& carParams, const std:
             rules_.event(Rules::Event::CarCollision, wall_);
         }
     };
+    // Up to 10 active pedestrians (spawner 0x53c780); maps without sidewalks (Talim, Otoban) have none.
+    if (!map_.walks.empty()) {
+        peds_.resize(10);
+        for (std::size_t i = 0; i < peds_.size(); ++i) {
+            peds_[i].model = static_cast<int>(i * 3 % 15);
+            place_pedestrian(peds_[i]);
+        }
+    }
     lightState_.resize(map_.lights.size());
     groupPhase_.assign(map_.lightGroups.size(), 0);
     groupStart_.assign(map_.lightGroups.size(), -1.0);
@@ -394,6 +402,87 @@ void Sim::violation_generator() {
     }
 }
 
+void Sim::place_pedestrian(Pedestrian& p) {
+    // Random sidewalk within 150 m of the player (initial fill 0x53a054 / respawn 0x53c780).
+    const glm::vec3 P = cars_.empty() || !player().body ? glm::vec3(0) : flat(player().body->position());
+    for (int tries = 0; tries < 200; ++tries) {
+        const auto wi = std::uniform_int_distribution<std::size_t>(0, map_.walks.size() - 1)(rng_);
+        const auto& w = map_.walks[wi];
+        if (w.crossing) continue;
+        if (glm::length(flat(node(w.a)) - P) > 70.0f && tries < 190) continue;
+        p.walk = static_cast<int>(wi);
+        const bool fwd = std::uniform_int_distribution<int>(0, 1)(rng_) != 0;
+        p.from = fwd ? w.a : w.b;
+        p.to = fwd ? w.b : w.a;
+        const float len = glm::length(flat(node(w.b) - node(w.a)));
+        p.along = std::uniform_real_distribution<float>(0, std::max(len - 1, 0.0f))(rng_);
+        p.speed = 0;
+        p.active = true;
+        return;
+    }
+    p.active = false;
+}
+
+void Sim::update_pedestrians(double dtd) {
+    const float dt = static_cast<float>(dtd);
+    Car& pl = player();
+    const glm::vec3 P = flat(pl.body->position());
+    const float kmh = pl.body->kmh();
+    for (auto& p : peds_) {
+        if (!p.active) continue;
+        const glm::vec3 A = node(p.from), B = node(p.to);
+        const float len = std::max(glm::length(flat(B - A)), 0.01f);
+        const glm::vec3 f = flat(B - A) / len;
+        const auto& w = map_.walks[static_cast<std::size_t>(p.walk)];
+        // Cruise 4.0 in the game's speed unit; world speeds are scaled by 3 like km/h (0x4e44b8) -> ~1.3 m/s. [G]
+        float target = 4.0f / 3.0f;
+        const float rem = len - p.along;
+        for (std::size_t i = 0; i < map_.lights.size(); ++i) {
+            const auto& L = map_.lights[i];
+            if (L.on != p.to || L.toward != p.from) continue;
+            const auto& s = lightState_[i];
+            if ((s.red || s.yellow) && rem > L.dist - 0.5f && rem < L.dist + 1.5f) target = 0;
+        }
+        // Crossing: wait if a car is on the next position (0x5457a8).
+        const glm::vec3 next = A + f * (p.along + 1.5f);
+        if (w.crossing)
+            for (const auto& c : cars_)
+                if (c.active && c.body && glm::length(flat(c.body->position()) - next) < 2.0f) target = 0;
+        p.speed = approach(p.speed, target, 10.0f * dt);
+        p.along += p.speed * dt;
+        p.dir = f;
+        p.pos = A + f * p.along + right_of(f) * 0.8f;
+        // Player hits a pedestrian: -17 (0x54586c).
+        if (kmh > 3.0f && glm::length(P - flat(p.pos)) < 1.3f && wall_ > p.lastHit + 3.0) {
+            p.lastHit = wall_;
+            rules_.event(Rules::Event::PedestrianHit, wall_);
+        }
+        // Road side of a crossing: "Dikkat Yayaya Öncelik Tanı" when the player approaches (0x546cfc).
+        if (w.crossing && kmh > 5.0f && glm::length(P - flat(p.pos)) < kmh / 3.6f + w.len / 2 + 2 && wall_ > lastYield_ + 5.0) {
+            lastYield_ = wall_;
+            rules_.notice("Dikkat Yayaya Öncelik Tanı", wall_);
+        }
+        if (p.along >= len) {
+            std::vector<std::size_t> opts;
+            for (std::size_t i = 0; i < map_.walks.size(); ++i) {
+                const auto& o = map_.walks[i];
+                if (static_cast<int>(i) == p.walk) continue;
+                if (o.a == p.to || o.b == p.to) opts.push_back(i);
+            }
+            if (opts.empty()) {
+                std::swap(p.from, p.to);
+            } else {
+                const auto& o = map_.walks[opts[std::uniform_int_distribution<std::size_t>(0, opts.size() - 1)(rng_)]];
+                p.walk = static_cast<int>(&o - map_.walks.data());
+                p.from = p.to;
+                p.to = o.a == p.from ? o.b : o.a;
+            }
+            p.along = 0;
+        }
+        if (glm::length(P - flat(p.pos)) > 120.0f) place_pedestrian(p);
+    }
+}
+
 void Sim::update(double dt, const DriveInput& input) {
     wall_ += dt;
     if (!paused_) update_lights();
@@ -418,6 +507,7 @@ void Sim::update(double dt, const DriveInput& input) {
     update_player_road(p);
     player_rules(p);
     violation_generator();
+    update_pedestrians(dt);
     rules_.expire(wall_);
 }
 

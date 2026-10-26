@@ -49,6 +49,17 @@ struct Car {
     bool brakeLights = false, reverseLights = false;
 };
 
+// Pedestrian (TYaya, docs/re/WORLD.md §3): walks sidewalk/crossing links, obeys lights.
+struct Pedestrian {
+    int model = 0;          // 0..14: a1..a5, k1..k5, ak1..ak5
+    int walk = -1;          // index into MapData::walks
+    int from = -1, to = -1;
+    float along = 0, speed = 0;
+    bool active = false;
+    double lastHit = -100;
+    glm::vec3 pos{0}, dir{0, 0, 1};
+};
+
 struct Litter {  // TCop: thrown by a littering AI car
     glm::vec3 pos;
 };
@@ -78,6 +89,7 @@ public:
     Car& player() { return cars_[static_cast<std::size_t>(playerIdx_)]; }
     const std::vector<LightState>& lights() const { return lightState_; }
     const std::vector<Litter>& litter() const { return litter_; }
+    const std::vector<Pedestrian>& pedestrians() const { return peds_; }
     Rules& rules() { return rules_; }
     float remaining(const Car& c) const;  // distance to the target node (0x53b068)
 
@@ -94,6 +106,9 @@ private:
     void advance_link(Car& c);
     void player_rules(Car& c);
     void violation_generator();
+    void update_pedestrians(double dt);
+    void place_pedestrian(Pedestrian& p);
+    double lastYield_ = -100;
     int car_ahead(const Car& c, float* gap) const;
     glm::vec3 node(int i) const { return {map_.nodes[static_cast<std::size_t>(i)].pos[0], map_.nodes[static_cast<std::size_t>(i)].pos[1], map_.nodes[static_cast<std::size_t>(i)].pos[2]}; }
     int slot_of(int nodeIdx, int neighbour) const;
@@ -107,6 +122,7 @@ private:
     std::vector<int> groupPhase_;
     std::vector<double> groupStart_;
     std::vector<Litter> litter_;
+    std::vector<Pedestrian> peds_;
     Rules rules_;
     std::mt19937 rng_;
     double time_ = 0, wall_ = 0, lastViolationRoll = -15;

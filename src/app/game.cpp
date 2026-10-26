@@ -58,6 +58,7 @@ void App::load_map(int index) {
     scene_ = std::make_unique<Scene>(r_, *fs_, cfg_);
     scene_->load_map(m);
     scene_->load_cars();
+    scene_->load_people();
     Sim::Config sc;
     sc.seed = static_cast<unsigned>(rng_());
     sim_ = std::make_unique<Sim>(m, scene_->car_params(), scene_->car_colors(rng_), sc);

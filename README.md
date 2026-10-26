@@ -24,7 +24,8 @@ This repository contains:
 | Start screen, help, driver profiles, licence quiz, map selection | working; layout and assets taken from the user's executable and files |
 | Eğitim Sahası (map 1): driving, AI traffic, traffic lights, HUD, sign questions, red-light and litter violators, penalties, timer, F4 pass, report, menu question, unlock, continue to map 2 | working; covered by automated playthrough tests |
 | Kasaba, Şehir, Şehir Merkezi, Otoban (debug map 5) | load and drive with scenery, signs, lights and AI cars; map-specific actors are missing (see ROADMAP) |
-| Pedestrians, train/level crossing, school bus, emergency vehicles, wrong parking, right-of-way rule, hospital horn rule, cutscene videos, music-list editor, joystick | **not implemented** |
+| Pedestrians (maps 2–4: original models walk sidewalks and crossings, obey lights; hit −17; yield notice) | basic; no walk animation, no pedestrian violator question |
+| Train/level crossing, school bus, emergency vehicles, wrong parking, right-of-way rule, hospital horn rule, cutscene videos, music-list editor, joystick | **not implemented** |
 
 ## Quick start
 

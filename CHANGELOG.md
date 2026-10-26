@@ -9,4 +9,5 @@
 - Native `toyota-trafik` (C++23, SDL3, OpenGL 3.3, ODE): menus from the user's executable, profiles, licence
   quiz, map selection, all five maps, ODE car, AI traffic, lights, rules and scoring, sign and violator questions,
   speech/music/engine audio, time limit, F4 pass, report, unlocks, data-folder validator (`--check`).
+- Basic pedestrians on maps 2–4 (original models, sidewalks/crossings, lights, −17 hit rule).
 - Script runner and ctest playthrough tests (Eğitim Sahası fail and pass paths, per-map smoke tests).

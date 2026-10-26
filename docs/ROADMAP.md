@@ -17,8 +17,10 @@ Milestones from goal.txt §14. Evidence is in brackets.
 
 Evidence for most of these exists in `re/WORLD.md` / `re/RULES.md`; they are listed by priority.
 
-1. Pedestrians (`TYaya`/`TInsan`): walking, pedestrian hit −17, pedestrian red-light violator question (code 5),
-   "Dikkat Yayaya Öncelik Tanı" message. Pedestrian meshes and textures already resolve.
+1. Pedestrians: **basic version done** (up to 10 per map on maps 2–4, original `Insanlar\*.smd` models drawn in the
+   reference pose, sidewalk/crossing walking, obey lights, wait for cars on crossings, hit −17, "Dikkat Yayaya Öncelik
+   Tanı"). Missing: skeletal walk animation (`yuru.smd`), clothes tint, the pedestrian red-light violator question
+   (code 5; its trigger `FUN_00539c78` is an open RE question), exact spawner and walk-speed units ([G] 4/3 m/s).
 2. Map-specific actors: train and level crossing (map 3, `DingDing`), school bus stop arms and the overtaking rule
    (−7), ambulance/police sirens, wrong-parking violator (code 3; needs a car re-placement).
 3. Right-of-way rule (−4) and the hospital-zone horn rule (−5).
@@ -34,4 +36,4 @@ Evidence for most of these exists in `re/WORLD.md` / `re/RULES.md`; they are lis
 
 ## Next concrete action
 
-Implement pedestrians (gap 1) from `re/WORLD.md` §3, then the map 3 train.
+Map 3 train and level crossing (`re/WORLD.md` §5.1), then pedestrian walk animation.

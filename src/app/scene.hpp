@@ -1,4 +1,5 @@
 #pragma once
+#include <glm/gtc/matrix_transform.hpp>
 #include <map>
 #include <memory>
 #include <optional>
@@ -21,6 +22,7 @@ public:
     ~Scene();
     void load_map(const MapData& m);  // scenery, signs, lights, billboards, sky
     void load_cars();                 // the 16 vehicle models
+    void load_people();               // Insanlar\\a1..a5, k1..k5, ak1..ak5
     std::vector<CarParams> car_params() const;
     std::vector<glm::vec3> car_colors(std::mt19937& rng) const;
 
@@ -39,6 +41,7 @@ public:
     Pick pick(Sim& sim, float mx, float my, int w, int h) const;
     const Texture* sign_texture(int number);
     glm::mat4 view() const { return view_; }
+    void look_at(glm::vec3 eye, glm::vec3 at) { view_ = glm::lookAt(eye, at, glm::vec3(0, 1, 0)); }
     glm::mat4 proj(int w, int h) const;
 
 private:
@@ -61,6 +64,7 @@ private:
     std::vector<GpuMesh> owned_;
     GpuMesh lamp_, signPlate_, pole_, litterBox_, billboard_, arrow_;
     std::array<CarModel, 16> cars_;
+    std::array<std::optional<GpuMesh>, 15> people_;
     std::array<const Texture*, 6> sky_{};
     std::map<int, const Texture*> signTex_;
     int camMode_ = 1;

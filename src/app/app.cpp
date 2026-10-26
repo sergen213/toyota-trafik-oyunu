@@ -358,6 +358,22 @@ void App::run_script(double) {
             } else if (s.cmd == "loadmap") {  // test-only: like the original's Demo keys 1..5
                 licenceThisRun_ = true;
                 start_map(std::stoi(arg(0)));
+            } else if (s.cmd == "peds") {
+                int n = 0;
+                float best = 1e9f;
+                for (const auto& p : sim_->pedestrians())
+                    if (p.active) {
+                        ++n;
+                        best = std::min(best, glm::length(p.pos - sim_->player().body->position()));
+                    }
+                log_info("pedestrians active {} nearest {:.1f} m", n, best);
+                if (arg(0) == "shot")
+                    for (const auto& p : sim_->pedestrians())
+                        if (p.active && glm::length(p.pos - sim_->player().body->position()) <= best + 0.01f) {
+                            scene_->look_at(p.pos - p.dir * 4.0f + glm::vec3(1.5f, 1.8f, 0), p.pos + glm::vec3(0, 0.9f, 0));
+                            scene_->draw(*sim_, vw_, vh_, std::nullopt);  // draw with this view, then capture
+                            screenshot(arg(1));
+                        }
             } else if (s.cmd == "label") {
             } else if (s.cmd == "skipif") {
                 if (cond(arg(0))) {

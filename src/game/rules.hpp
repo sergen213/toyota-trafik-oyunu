@@ -46,6 +46,7 @@ public:
     std::string report(int total) const;
     const std::vector<Message>& messages() const { return msgs_; }
     void expire(double now);
+    void notice(std::string text, double now) { push(std::move(text), now); }  // message without points
 
     static int points(Event e);
     static std::string message(Event e);
