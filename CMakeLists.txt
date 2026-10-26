@@ -20,6 +20,8 @@ find_package(GLEW REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MPG123 REQUIRED IMPORTED_TARGET libmpg123)
 pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
+include(cmake/ODE.cmake)
+find_package(glm CONFIG REQUIRED)
 find_path(STB_INCLUDE_DIR stb_image.h PATH_SUFFIXES stb REQUIRED)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -40,7 +42,11 @@ add_library(tto_core STATIC
   src/game/quiz.cpp
 )
 target_include_directories(tto_core PUBLIC src)
+target_link_libraries(tto_core PUBLIC tto_ode glm::glm)
+target_compile_definitions(tto_core PUBLIC GLM_ENABLE_EXPERIMENTAL)
 
+option(TTO_BUILD_GAME "Build the game executable" ON)
+if(TTO_BUILD_GAME)
 add_executable(toyota-trafik
   src/main.cpp
   src/app/app.cpp
@@ -56,6 +62,7 @@ target_link_libraries(toyota-trafik PRIVATE tto_core SDL3::SDL3 SDL3_ttf::SDL3_t
   OpenGL::GL GLEW::GLEW PkgConfig::MPG123 PkgConfig::FONTCONFIG)
 
 install(TARGETS toyota-trafik RUNTIME DESTINATION bin)
+endif()
 
 if(TTO_BUILD_TESTS)
   enable_testing()

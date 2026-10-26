@@ -46,3 +46,11 @@ TEST(SoruBank, RejectsTruncatedFileAndOverlongStrings) {
     EXPECT_THROW(parse_sorubank(b), std::runtime_error);
     EXPECT_THROW(parse_sorubank({}), std::runtime_error);
 }
+
+TEST(SoruBank, EveryTruncationThrows) {
+    const auto r = record(1, "Ehliyet", 1);
+    for (std::size_t n = 1; n < r.size(); n += 37) {
+        std::vector<std::uint8_t> cut(r.begin(), r.begin() + static_cast<std::ptrdiff_t>(n));
+        EXPECT_THROW(parse_sorubank(cut), std::runtime_error);
+    }
+}

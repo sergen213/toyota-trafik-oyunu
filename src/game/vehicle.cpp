@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace tto {
@@ -27,6 +28,15 @@ void set_rot(dBodyID b, const glm::mat3& m) {
         R[r * 4 + 3] = 0;
     }
     dBodySetRotation(b, R);
+}
+
+// oxGLODE's patched ODE had dJointCorrectHinge2 (not in upstream ODE): it re-aligns a
+// rear wheel's axes with the chassis so the unsteered wheels do not drift. Same effect here.
+void correct_hinge2(dJointID j, dBodyID chassis) {
+    const dReal* R = dBodyGetRotation(chassis);
+    const dReal up[3] = {R[1], R[5], R[9]}, axis2[3] = {R[0], R[4], R[8]};
+    const dReal a1[3] = {up[0], up[1], up[2]};
+    dJointSetHinge2Axes(j, a1, axis2);
 }
 
 }  // namespace
@@ -177,10 +187,10 @@ void OdeCar::place(glm::vec3 pos, glm::vec3 fwd) {
         dJointID j = joints_[static_cast<std::size_t>(i)];
         const glm::vec3 a = pos + B * wheelLocal_[static_cast<std::size_t>(i)];
         dJointSetHinge2Anchor(j, a.x, a.y, a.z);
-        // axis1 = -up so that a positive Steer turns right; axis2 = right so that
-        // negative wheel velocity drives forward, as in the original (0x4e451c).
-        dJointSetHinge2Axis1(j, -up.x, -up.y, -up.z);
-        dJointSetHinge2Axis2(j, right.x, right.y, right.z);
+        // Axis signs chosen so that, as in the original, positive Steer turns right and
+        // negative wheel velocity drives forward (0x4e451c); checked by tests/test_vehicle.cpp.
+        const dReal a1[3] = {up.x, up.y, up.z}, a2[3] = {-right.x, -right.y, -right.z};
+        dJointSetHinge2Axes(j, a1, a2);
         dJointSetHinge2Param(j, dParamFMax, kFMax);
         dJointSetHinge2Param(j, dParamSuspensionERP, kSuspErp);
         dJointSetHinge2Param(j, dParamSuspensionCFM, kSuspCfm);
@@ -208,8 +218,8 @@ void OdeCar::update_joints() {
         dJointSetHinge2Param(j, dParamFMax2, motorRunning ? kRunForce : kAltForce);
     }
     if (motorRunning) {
-        dJointCorrectHinge2(joints_[2]);
-        dJointCorrectHinge2(joints_[3]);
+        correct_hinge2(joints_[2], chassis_);
+        correct_hinge2(joints_[3], chassis_);
     }
 }
 

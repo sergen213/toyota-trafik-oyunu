@@ -51,3 +51,5 @@ void LicenceQuiz::restart_round() {
     correct_ = 0;
     state_ = State::Asking;
 }
+
+}  // namespace tto

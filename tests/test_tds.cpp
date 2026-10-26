@@ -83,3 +83,15 @@ TEST(Tds, RejectsTruncatedAndOutOfRangeInput) {
     }
     EXPECT_THROW(load_3ds(d), std::runtime_error);
 }
+
+TEST(Tds, EveryTruncationEitherThrowsOrParses) {
+    const auto d = quad3ds();
+    for (std::size_t n = 0; n < d.size(); ++n) {
+        std::vector<std::uint8_t> cut(d.begin(), d.begin() + static_cast<std::ptrdiff_t>(n));
+        try {
+            (void)load_3ds(cut);
+        } catch (const std::runtime_error&) {
+        }
+    }
+    SUCCEED();  // no crash / UB (run under ASan in docs/TESTING.md)
+}
