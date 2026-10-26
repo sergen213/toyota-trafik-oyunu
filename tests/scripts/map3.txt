@@ -1,0 +1,8 @@
+wait 0.2
+loadmap 3
+until screen=Game 60
+until idle 30
+autodrive 8
+shot map3
+expect map=3
+quit

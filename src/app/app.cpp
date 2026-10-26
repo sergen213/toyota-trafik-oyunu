@@ -355,6 +355,9 @@ void App::run_script(double) {
                     }
                 if (!done) throw std::runtime_error("no panel line with tag " + arg(0));
                 waitUntil_ = clock_ + 0.2;
+            } else if (s.cmd == "loadmap") {  // test-only: like the original's Demo keys 1..5
+                licenceThisRun_ = true;
+                start_map(std::stoi(arg(0)));
             } else if (s.cmd == "label") {
             } else if (s.cmd == "skipif") {
                 if (cond(arg(0))) {

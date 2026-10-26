@@ -90,7 +90,7 @@ if(TTO_BUILD_TESTS)
 endif()
 
 if(TTO_BUILD_TESTS AND TTO_BUILD_GAME)
-  foreach(s talim_playthrough talim_pass)
+  foreach(s talim_playthrough talim_pass map1 map2 map3 map4 map5)
     add_test(NAME playthrough_${s}
       COMMAND ${CMAKE_SOURCE_DIR}/tests/run_playthrough.sh $<TARGET_FILE:toyota-trafik>
               ${CMAKE_SOURCE_DIR}/tests/scripts/${s}.txt ${CMAKE_BINARY_DIR}/playthrough/${s})

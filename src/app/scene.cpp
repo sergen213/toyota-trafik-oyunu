@@ -143,7 +143,7 @@ void Scene::load_map(const MapData& m) {
     const bool logo = to_lower_ascii(cfg_.text("Logo", "True")) != "false";
     std::vector<std::string> dirs;
     if (logo) dirs.push_back("Bolumler\\maps\\Logo");
-    dirs.insert(dirs.end(), {"Bolumler\\maps", "Bolumler\\Diger", m.sehirDir});
+    dirs.insert(dirs.end(), {"Bolumler\\maps", "Bolumler\\Diger", m.sehirDir, "Bolumler\\Diger\\TIsaret", "Insanlar", "Arabalar"});
     for (const auto& me : m.meshes) {
         if (me.relative || me.cls != "TGLFreeForm") continue;  // TGLOXStaMesh is collision only
         glm::mat4 bake(1.0f);
