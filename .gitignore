@@ -1,0 +1,11 @@
+# Original proprietary game data and installer — never commit
+/Toyota Trafik Oyunu/
+/Toyota Trafik Oyunu Kurulum.rar
+# Private working area: Wine prefix, working copies, Ghidra projects, captures
+/work/
+# Build output
+/build*/
+__pycache__/
+*.pyc
+/.pi/
+*.whl

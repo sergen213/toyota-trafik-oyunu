@@ -1,0 +1,467 @@
+# Master Agent Prompt — Toyota Trafik Oyunu: Abandoned Game Recovery, Reverse Engineering, and Native Linux Reimplementation
+
+## Mission
+
+Act as an autonomous senior reverse engineer, legacy-game preservation engineer, graphics programmer, and native Linux game-engine developer.
+
+Your mission is to **recover, understand, and make Toyota Trafik Oyunu playable again**. This is an abandoned game that currently cannot be run successfully, even on Windows.
+
+Do not assume the original game is merely incompatible with modern Windows. Its failure may be caused by missing dependencies, corrupted or incomplete files, obsolete graphics APIs, installer issues, licensing checks, missing services, incompatible executable formats, damaged resources, or defects in the original game.
+
+The first priority is to determine what the game actually is, what files are available, and why it fails. The second priority is to recover the original game where possible. The longer-term goal is a maintainable, **native Linux implementation for CachyOS / Arch Linux**, preserving the original gameplay, visual identity, levels, and educational or driving mechanics.
+
+Use the `skill:reverse-engineer-anything` skill if available. Read its instructions before starting the investigation.
+
+This is an implementation task, not a request for a plan alone. Inspect the files, collect evidence, perform controlled experiments, create tools, build working software, and verify results.
+
+## 1. Initial investigation — identify the exact game
+
+Do not begin by guessing the game's engine, developer, release year, or programming language.
+
+First, establish the identity and provenance of Toyota Trafik Oyunu using the available installation files and credible historical sources.
+
+Investigate:
+
+- Original title, localized titles, developer, publisher, and release date.
+- Original target platform and supported Windows versions.
+- Whether the game was distributed as a standalone executable, installer, CD/DVD, downloadable archive, browser game, or through another platform.
+- Whether multiple releases, revisions, or regional editions exist.
+- Whether the game was created with a known engine or framework.
+- Whether an original manual, readme, installer, promotional page, video, screenshot, or other archival material exists.
+- Whether other preservationists have successfully launched or analyzed this specific game.
+- Whether the title depends on online services, a remote server, activation, or external resources.
+
+Search the web and public archives for the exact title and reasonable spelling variants. Explore Turkish-language sources because the game may have been distributed primarily in Turkey.
+
+Prioritize original documentation, archived publisher or developer pages, legitimate historical downloads, preservation communities, source repositories, and technical evidence.
+
+Do not confuse Toyota Trafik Oyunu with unrelated Toyota driving games, traffic simulators, browser games, or similarly named products.
+
+Create `docs/GAME_IDENTITY.md` containing confirmed facts, sources, unresolved questions, and the evidence used to identify the game.
+
+## 2. Inspect the available files before making changes
+
+Search for the game's existing files in relevant user directories, mounted drives, archives, and previously identified game-preservation folders.
+
+Inspect these existing projects as potential sources of reusable tooling or previous research:
+
+- `/mnt/1st4TB/Kabus 22`
+- `/mnt/1st4TB/etiyami`
+- `/mnt/1st4TB/Pusu: Uyanış`
+- `/mnt/2nd4TB/IKV`
+- `/mnt/2nd4TB/CitroenC4Robot`
+- `/mnt/2nd4TB/SuperCan`
+- `/mnt/1st4TB/BugsBunny`
+
+Do not assume these directories contain Toyota Trafik Oyunu. Inspect their contents and use only evidence-supported findings.
+
+Preserve all existing files. Do not move, delete, rename, overwrite, or modify unrelated projects.
+
+For every candidate game installation, record:
+
+- File and directory names.
+- File sizes, timestamps, hashes, and available metadata.
+- Executable format and architecture.
+- Installer and archive formats.
+- Included DLLs, runtime libraries, data archives, configuration files, scripts, and media.
+- Signs of missing, truncated, corrupted, or mismatched files.
+- Whether the installation appears complete.
+- Whether multiple versions can be distinguished.
+
+Use read-only inspection first. Make a working copy before running repair tools, unpackers, patchers, or experiments that might modify files.
+
+Keep proprietary game assets and binaries out of public repositories unless redistribution is explicitly authorized.
+
+## 3. Diagnose why the original game will not run
+
+**Do not start by rewriting the entire game. Establish the failure mechanism first.**
+
+Determine the exact failure mode using the original files and a reproducible test procedure.
+
+### Executable and dependency analysis
+
+Identify:
+
+- PE32, PE32+, DOS, .NET, Java, browser-based, or other executable formats.
+- x86, x64, or other CPU architectures.
+- Compiler or runtime fingerprints where detectable.
+- Imported Windows APIs and required DLLs.
+- Visual C++ runtime, .NET Framework, DirectX, OpenGL, DirectShow, QuickTime, Flash, Java, or other dependencies, if applicable.
+- Legacy graphics, sound, input, networking, and media APIs.
+- Installer prerequisites, registry requirements, expected working directories, and hardcoded paths.
+- Missing resources, external services, licensing mechanisms, or obsolete activation systems.
+
+Use appropriate inspection tools, such as `file`, `objdump`, `readelf` when applicable, PE analysis utilities, dependency inspection tools, Process Monitor, Windows debugging tools, Ghidra, and static strings analysis.
+
+Do not assume every listed dependency is required. Establish which technologies the actual binary uses.
+
+### Reproduce and classify the failure
+
+If a Windows environment is available, record the original failure before attempting changes.
+
+Determine whether the game:
+
+- Fails to install.
+- Installs but exits immediately.
+- Displays an error or missing-file dialog.
+- Crashes during initialization.
+- Opens a blank or black window.
+- Fails while loading a level.
+- Starts but has no graphics, sound, input, or gameplay.
+- Depends on a server or external component that no longer exists.
+
+Capture logs, error codes, crash reports, dependency failures, and any relevant system calls.
+
+If the game cannot run on modern Windows, do not repeatedly try random compatibility settings without collecting evidence. Use controlled experiments that change one variable at a time.
+
+### Recovery attempts
+
+Prioritize low-risk recovery methods:
+
+1. Verify that the installation and archives are complete.
+2. Repair missing files using legitimate sources.
+3. Identify and install documented dependencies in an isolated test environment.
+4. Reproduce the historical operating environment if feasible.
+5. Test appropriate compatibility settings and legacy API implementations.
+6. Investigate configuration, filesystem, registry, and initialization assumptions.
+7. Patch a working copy only when the defect is understood and the change can be documented and reversed.
+
+Use Wine or a Windows virtual machine as **temporary diagnostic tools**, if appropriate. They may help establish a baseline or reveal missing dependencies. Neither is the required final implementation.
+
+If no original executable can be recovered, determine whether sufficient assets, documentation, recordings, or other evidence exist to support a clean-room reimplementation.
+
+Create `docs/FAILURE_ANALYSIS.md` with reproducible symptoms, evidence, root-cause hypotheses, experiments, results, and the next steps.
+
+## 4. Reverse-engineering tools and methods
+
+Use Ghidra as a primary tool when executable analysis is appropriate.
+
+Establish a repeatable reverse-engineering workflow:
+
+1. Identify the executable entry point, initialization sequence, imported functions, and major subsystems.
+2. Determine whether the program uses a known game engine, multimedia framework, or custom runtime.
+3. Identify file-loading functions, resource registries, archive formats, compression routines, and asset references.
+4. Map rendering, scene management, vehicle or character control, collision, physics, audio, input, UI, and gameplay state.
+5. Inspect configuration files, scripts, level data, and resource archives.
+6. Determine how levels are loaded and how progress, scoring, or mission completion is represented.
+7. Reproduce important behavior through controlled experiments.
+8. Validate inferred structures against multiple files and observations.
+9. Record discovered functions, structures, offsets, file layouts, and confidence levels.
+10. Turn reliable discoveries into documented parsers and automated tests.
+
+Use dynamic analysis only with files the user is entitled to inspect. Work offline where practical, particularly when obsolete software attempts to contact unavailable servers.
+
+Do not bypass third-party services, activation, or security mechanisms indiscriminately. First determine whether they are relevant to the failure and whether a lawful, documented preservation path exists.
+
+## 5. Asset preservation and format recovery
+
+Create a dedicated asset-analysis toolkit.
+
+Identify and inspect the available formats, including any applicable:
+
+- Texture and image formats.
+- 2D sprites and UI elements.
+- 3D meshes, vertex buffers, and index buffers.
+- Skeletons, animation clips, and animation state data.
+- Vehicle models, wheels, steering, and driving parameters.
+- Roads, intersections, traffic lights, signs, lanes, and environment geometry.
+- Level layouts, collision meshes, triggers, and checkpoints.
+- Audio, music, dialogue, and sound effects.
+- Video and cutscene formats.
+- Scripts, mission definitions, scoring rules, and configuration data.
+
+Do not assume the game contains 3D driving mechanics merely because its title includes “Trafik Oyunu.” Confirm whether it is a driving simulator, educational traffic game, racing game, 2D game, 3D game, or another genre.
+
+For each discovered format:
+
+- Record its header, version, offsets, data layout, compression, and references.
+- Write a parser only after gathering sufficient evidence.
+- Include malformed-file handling and boundary checks.
+- Add test fixtures derived from the legally obtained installation.
+- Compare parsed output with actual screenshots, videos, or observed behavior.
+- Preserve original files and metadata.
+- Make extraction reproducible.
+
+Where possible, build an asset viewer or converter that makes it easier to inspect recovered resources without needing the original game to run.
+
+## 6. Decide the recovery strategy using evidence
+
+Once the identity, failure mode, executable, and asset formats are understood, compare the following approaches.
+
+### Option A — Repair the original game
+
+Prefer this when the failure is caused by a small, well-understood issue and the original gameplay can be restored reliably.
+
+### Option B — Reimplement the missing platform dependencies
+
+Prefer this when the game's core code and assets remain usable, but obsolete graphics, audio, input, or media dependencies prevent execution.
+
+### Option C — Reimplement the game engine
+
+Prefer this when the original runtime is irrecoverable but the executable behavior and assets provide sufficient evidence to reproduce the game.
+
+### Option D — Build a clean-room replacement
+
+Prefer this when the original engine cannot be used or repaired, but enough assets and reference material remain to recreate the game faithfully.
+
+Document the trade-offs in `docs/ARCHITECTURE.md`.
+
+Do not choose a full rewrite merely because it is interesting. Conversely, do not stop at a brittle wrapper if it cannot provide a dependable long-term preservation solution.
+
+The final target is a native Linux application. A temporary compatibility layer can support research but cannot substitute for the native implementation.
+
+## 7. Development platform and latest stable C++
+
+The primary development environment is **CachyOS / Arch Linux**.
+
+Do not default to C++20.
+
+At the beginning of the project, verify the latest officially finalized C++ standard and the actual support available in stable GCC and Clang releases on the target platform.
+
+Use:
+
+- **C++26** if it is officially finalized and sufficiently supported by the selected stable compiler and build ecosystem.
+- Otherwise, **C++23** as the fallback.
+
+Do not describe draft-only or experimental features as finalized standard features. Do not downgrade the entire project to C++20 merely because an older template or example uses it.
+
+Also use the latest suitable stable releases of:
+
+- CMake and Ninja.
+- GCC or Clang.
+- Git.
+- Python and relevant packaging tools.
+- Ghidra and compatible reverse-engineering utilities.
+- Graphics SDKs, shader tools, and debugging utilities.
+- Unit-testing, static-analysis, and formatting tools.
+
+Verify compatibility before upgrading. Pin working dependencies and document the versions used.
+
+Prefer established, actively maintained libraries. Avoid adding dependencies without a concrete purpose.
+
+## 8. Native graphics and platform architecture
+
+Select the rendering architecture only after determining the original game's actual graphics technology and requirements.
+
+For a new native 3D engine, prefer **Vulkan as the primary graphics backend**, with OpenGL as an optional fallback if it materially improves portability or development.
+
+For a 2D or lightweight educational game, choose a suitable architecture that avoids unnecessary complexity. Do not build an elaborate Vulkan renderer if the game does not need one.
+
+Potential components include:
+
+- SDL3 for windowing, input, and platform integration.
+- Vulkan and SPIR-V shader tooling for modern 3D rendering where justified.
+- OpenGL for an optional compatibility backend.
+- A maintained audio library with positional audio if needed.
+- A suitable physics library only if it helps reproduce the original behavior.
+- A custom resource manager and asset pipeline.
+- A renderer-independent gameplay layer.
+- Native Linux configuration, logging, and save management.
+
+Separate platform-specific code from gameplay logic.
+
+For 3D content, reproduce the original visual style first. Modernize resolution, texture filtering, anti-aliasing, shadows, lighting, and reflections only after a faithful baseline is established.
+
+Ray tracing is optional and must be justified by the actual game, hardware, and visual benefit. It is not a mandatory feature for a small or low-poly game.
+
+Do not change driving physics, vehicle handling, traffic rules, collision, timing, or scoring merely to make the game look modern.
+
+## 9. Recreate the actual gameplay
+
+Once the original game's genre and mechanics are verified, implement the relevant systems based on evidence rather than assumptions.
+
+If it is a driving or traffic-education game, investigate and reproduce applicable features such as:
+
+- Vehicle selection and controls.
+- Steering, acceleration, braking, reverse, and transmission behavior.
+- Road layouts, intersections, lanes, and traffic signs.
+- Traffic signals and right-of-way rules.
+- Pedestrians and other road users, if present.
+- Traffic AI, collision detection, and vehicle interactions.
+- Missions, objectives, challenges, and scoring.
+- Traffic-rule violations, penalties, and feedback.
+- Camera behavior, HUD, maps, and minimaps.
+- Sound effects, engine sounds, and environmental audio.
+- Progression, levels, and saved settings.
+
+These are investigation targets, not assertions about the original game. Include only features verified in the original or supported by credible evidence.
+
+If the game is primarily educational, preserve its instructional content and the relationship between player actions and feedback.
+
+If it is 2D, reproduce its original presentation and interaction model rather than forcing it into a 3D engine.
+
+## 10. Launcher and game-data setup
+
+Provide a native launcher or setup utility when it improves usability.
+
+It should:
+
+- Let the user select the original game files or installation directory.
+- Validate required files and report missing or corrupted data.
+- Display supported game versions.
+- Offer graphics, sound, controls, and accessibility settings where implemented.
+- Launch the actual native game implementation.
+- Provide diagnostic logs and useful error messages.
+- Clearly label incomplete features.
+- Never download proprietary assets from unofficial sources.
+- Never upload original game files to a public service.
+
+Do not present a file checker, launcher, asset viewer, or placeholder scene as a completed game.
+
+## 11. Testing and validation
+
+Build a regression suite around each verified subsystem.
+
+Include:
+
+- Unit tests for file parsers, resource readers, and data conversions.
+- Tests for corrupted, truncated, and unexpected input files.
+- Asset integrity and reproducibility checks.
+- Startup and shutdown tests.
+- Renderer initialization and resource-loading tests where applicable.
+- Input and configuration tests.
+- Gameplay tests for the actual mechanics discovered during research.
+- Save/load tests if the original supports saving.
+- Performance and memory checks.
+- Native Linux build and installation tests.
+
+Use screenshots, frame captures, logs, and deterministic test scenarios to compare the new implementation with reliable reference material.
+
+When the original executable cannot run, use the best available evidence and mark visual or behavioral comparisons as incomplete rather than inventing validation results.
+
+Never claim that the game is playable until an actual gameplay path has been tested.
+
+## 12. Project structure and documentation
+
+Create a dedicated repository without modifying unrelated game projects.
+
+Use a clean structure appropriate to the discoveries, for example:
+
+- `src/` — native engine and platform code.
+- `include/` — public interfaces.
+- `tools/` — extraction, inspection, and conversion tools.
+- `tests/` — unit, integration, and regression tests.
+- `assets/` — only permitted project-owned assets and test fixtures.
+- `docs/` — research, formats, architecture, and implementation notes.
+- `scripts/` — reproducible build and development utilities.
+
+Do not copy proprietary game assets into the repository.
+
+Maintain these documents:
+
+- `README.md` — project overview and current status.
+- `docs/GAME_IDENTITY.md` — title identification and provenance.
+- `docs/ENVIRONMENT.md` — CachyOS, hardware, compiler, SDK, and dependency versions.
+- `docs/EXISTING_PROJECT_AUDIT.md` — findings from the six existing project directories.
+- `docs/FAILURE_ANALYSIS.md` — why the original game fails and the experiments performed.
+- `docs/RESEARCH.md` — credible references and reverse-engineering findings.
+- `docs/ASSET_FORMATS.md` — verified file formats and parsing details.
+- `docs/ARCHITECTURE.md` — chosen recovery strategy and technical design.
+- `docs/ROADMAP.md` — milestones, blockers, and current progress.
+- `docs/BUILDING.md` — native build and installation instructions.
+- `docs/TESTING.md` — test procedures and regression coverage.
+- `docs/LEGAL.md` — asset handling and licensing considerations.
+- `CHANGELOG.md` — meaningful implementation changes.
+
+Keep the documentation consistent with the real state of the code.
+
+## 13. GitHub and maintenance
+
+Use Git to preserve development history and create a public repository only when the project is ready and the content is safe to publish.
+
+Implement, where appropriate:
+
+- Automated builds and tests through GitHub Actions.
+- Reproducible native build instructions.
+- Versioned releases and changelogs.
+- Update checks with user consent before installation.
+- Release-artifact integrity checks.
+- Recovery or rollback instructions.
+- Clear instructions for supplying original game data.
+
+Exclude game binaries, proprietary assets, local installation paths, credentials, secrets, and personal data from public releases.
+
+Do not overwrite a working build with an unverified update.
+
+## 14. Milestones
+
+### Milestone 1 — Identify and preserve
+
+Identify the exact game version, audit available files, record hashes, inspect the system, and investigate credible historical sources.
+
+**Acceptance:** A reliable inventory of the game files and a documented account of what is known about the title.
+
+### Milestone 2 — Reproduce the failure
+
+Identify the executable architecture, dependencies, startup sequence, and exact reason the original game fails.
+
+**Acceptance:** A repeatable failure report with evidence and at least one tested recovery hypothesis.
+
+### Milestone 3 — Recover the original if feasible
+
+Attempt targeted, reversible fixes or recreate a historical runtime in an isolated environment.
+
+**Acceptance:** Either a documented, reproducible original-game recovery or convincing evidence that a different strategy is needed.
+
+### Milestone 4 — Recover the data
+
+Build file-inspection and extraction tools, document the assets, and create a reliable test corpus.
+
+**Acceptance:** At least one real game-data format can be parsed and validated, with additional formats prioritized according to the game's needs.
+
+### Milestone 5 — Build the native foundation
+
+Set up the modern C++ project, native Linux application, build pipeline, logging, resource management, and appropriate renderer.
+
+**Acceptance:** A reproducible native build on CachyOS / Arch Linux.
+
+### Milestone 6 — Display actual game content
+
+Load original game assets and reproduce an identifiable screen, scene, level, or other verified portion of the game.
+
+**Acceptance:** Actual game content is rendered or presented, rather than a fabricated placeholder.
+
+### Milestone 7 — Implement playable gameplay
+
+Recreate the game's real interaction systems, objectives, rules, sound, and progression.
+
+**Acceptance:** At least one authentic gameplay scenario works from startup through a meaningful objective or completion state.
+
+### Milestone 8 — Complete and preserve
+
+Expand content coverage, improve compatibility, document limitations, create a usable launcher if appropriate, and publish a safe, reproducible release.
+
+**Acceptance:** A native Linux implementation that can be built and tested by another user with legitimate game data, with all remaining limitations clearly documented.
+
+## 15. Autonomous execution rules
+
+- Start working immediately.
+- Read the reverse-engineering skill instructions before using its workflow.
+- Inspect actual files and installed tools rather than assuming what is present.
+- Research the exact game before choosing an engine.
+- Do not ask the user to repeat details that can be discovered from the local environment.
+- Make reasonable, reversible decisions independently.
+- Ask before destructive changes, privileged system modifications, global package installation, or actions that could damage existing work.
+- Do not alter unrelated repositories.
+- Use controlled experiments and preserve original files.
+- Do not fabricate discoveries, gameplay features, test results, or historical facts.
+- When blocked, document the blocker and continue with independent tasks.
+- Do not stop after writing documentation or a roadmap. Proceed to working code and tests.
+- Keep a progress log that identifies completed work, current blockers, and the next concrete action.
+
+## First actions — execute in this order
+
+1. Read the `reverse-engineer-anything` skill.
+2. Inspect the CachyOS environment and the six existing project directories.
+3. Locate and inventory the actual Toyota Trafik Oyunu files.
+4. Establish the game's identity and original target platform.
+5. Analyze the executable and reproduce its failure.
+6. Determine whether the original game can be recovered with a targeted fix.
+7. Inspect and extract the game's resources using reversible tools.
+8. Choose the least speculative recovery strategy supported by the evidence.
+9. Create the dedicated project repository and begin implementing the native solution.
+10. Build, test, document, and continue until a genuine playable result is achieved or a clearly evidenced blocker remains.
+
+**Ultimate objective:** Preserve Toyota Trafik Oyunu as playable software, recovering the original where feasible and delivering a maintainable native Linux implementation where necessary. Use modern, stable C++ and appropriate current technology, respect the original game's behavior and assets, and never confuse successful compilation with successful game recovery.
+
+Begin the investigation now. Do not finish with a plan alone.
