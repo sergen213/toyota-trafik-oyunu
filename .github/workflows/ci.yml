@@ -1,0 +1,15 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: pacman -Syu --noconfirm --needed base-devel cmake ninja git sdl3 sdl3_ttf glew glm mpg123 fontconfig stb nlohmann-json gtest noto-fonts
+      - uses: actions/checkout@v4
+      - run: scripts/check_toolchain.sh
+      - run: cmake -S . -B build -G Ninja && ninja -C build
+      # Game data is proprietary and never available in CI: data and playthrough tests skip.
+      - run: cd build && ctest --output-on-failure
+      - name: no proprietary files tracked
+        run: "! git ls-files | grep -iE '\\.(exe|dll|msi|cab|3ds|smd|jpg|bmp|gif|wav|mp3|avi|mpg|dat|vdd)$'"
