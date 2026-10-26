@@ -22,8 +22,7 @@ Options: `-DTTO_BUILD_TESTS=OFF`, `-DTTO_BUILD_GAME=OFF` (parsers and tests only
 ## Install
 
 ```sh
-cmake --install build --prefix ~/.local
-install -Dm644 data/maps.json ~/.local/share/toyota-trafik/maps.json
+cmake --install build --prefix ~/.local   # installs bin/toyota-trafik and share/toyota-trafik/maps.json
 ```
 
 The binary looks for `maps.json` next to itself, in `../data` and in `../share/toyota-trafik`. Use `--data <dir>`

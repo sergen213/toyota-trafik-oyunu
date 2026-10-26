@@ -67,6 +67,9 @@ target_link_libraries(toyota-trafik PRIVATE tto_core SDL3::SDL3 SDL3_ttf::SDL3_t
   OpenGL::GL GLEW::GLEW PkgConfig::MPG123 PkgConfig::FONTCONFIG)
 
 install(TARGETS toyota-trafik RUNTIME DESTINATION bin)
+# The binary finds maps.json in <bindir>/data or <prefix>/share/toyota-trafik.
+configure_file(data/maps.json ${CMAKE_BINARY_DIR}/data/maps.json COPYONLY)
+install(FILES data/maps.json DESTINATION share/toyota-trafik)
 endif()
 
 if(TTO_BUILD_TESTS)
