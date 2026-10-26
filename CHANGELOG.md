@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- Car wheels on the far side of each car: the rim face now points outward and the tyres roll in the right direction.
-  The mirror was applied inside the rotating wheel frame, so it swung the rim plate through the ground as the wheel
-  turned and reversed the visible spin; it is now reflected across the car body (`M*L*M`).
+- Car wheels fixed: the right-side tyres were being drawn on top of the left ones (rim facing inboard), leaving the
+  right side bare. The far-side mesh is now mirrored across its own centre plane, so each tyre sits under its own
+  arch with the rim plate pointing out; steering toe is preserved and mirrored meshes keep outward-facing normals.
 
 ## 0.2.0 — 2026-10-26
 

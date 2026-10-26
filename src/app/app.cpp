@@ -488,7 +488,8 @@ void App::run_script(double) {
                 if (arg(0) == "shot" && near >= 0) {
                     const Car& c = sim_->cars()[static_cast<std::size_t>(near)];
                     const glm::vec3 cp = c.body->position();
-                    scene_->look_at(cp - c.body->forward() * 7.0f + glm::vec3(2.5f, 3.0f, 0), cp);
+                    const glm::mat4 CT = c.body->transform();
+                    scene_->look_at(glm::vec3(CT * glm::vec4(arg(3).empty() ? 2.5f : std::stof(arg(3)) * 2.5f, 3.0f, -7.0f, 1)), cp);
                     scene_->draw(*sim_, vw_, vh_, std::nullopt);
                     screenshot(arg(1));
                 }

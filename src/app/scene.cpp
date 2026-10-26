@@ -592,20 +592,26 @@ void Scene::draw(Sim& sim, int w, int h, std::optional<int> arrowSign, bool talk
             bo.tint = c.color;
             r_.draw(cm.body, B, ids(bo));
         }
-        // Wheels: Teker<n>.3ds on every ODE wheel body. The mesh is a pancake (rim plate on one axle end), so the
-        // far-side copy must be reflected in the *car* frame: M*L*M with M = diag(side,1,1). Mirroring post-multiplied
-        // by the wheel rotation reflects the spin itself, which reverses it and swings the rim plate through the
-        // ground as the wheel turns. Conjugation keeps det > 0, mirrors the centre across the car plane and flips the
-        // spin sign, so both sides roll forward with the rim facing out.
+        // Wheels: Teker<n>.3ds on every ODE wheel body. The mesh is a rotationally symmetric pancake with the rim
+        // plate on its +X end, and local +X is car-left (basis_from_forward), so the raw draw faces out on the left
+        // wheels and inboard on the right ones. Right-side copies are mirrored at their *own* centre plane
+        // (M = diag(-1,1,1) conjugated about the wheel offset, never the car origin - that teleports them onto the
+        // left cluster). Spin is invisible (no tread band), so only steering yaw needs de-mirroring: Rot(y,-delta)
+        // under M restores the toe direction.
         if (const GpuMesh& wm = wheels_[static_cast<std::size_t>(cm.wheel)]; wm.handle && c.type != 16) {
             const glm::mat4 invT = glm::affineInverse(T);
+            const glm::mat4 S = glm::scale(glm::mat4(1), glm::vec3(cm.wheelScale / 0.01f));
             for (int i = 0; i < 4; ++i) {
-                const glm::mat4 W = c.body->wheel_transform(i);
-                const float side = glm::dot(glm::vec3(W[3]) - c.body->position(), glm::vec3(T[0])) < 0 ? -1.0f : 1.0f;
-                glm::mat4 M(1.0f);
-                M[0] *= side;
-                const glm::mat4 L = invT * W;
-                r_.draw(wm, T * (M * L * M) * glm::scale(glm::mat4(1), glm::vec3(cm.wheelScale / 0.01f)), ids({}));
+                const glm::mat4 L = invT * c.body->wheel_transform(i);  // wheel in car frame
+                if (L[3].x >= 0) {
+                    r_.draw(wm, T * L * S, ids({}));
+                } else {
+                    const float delta = glm::eulerAngles(glm::quat_cast(L)).y;  // steering yaw about car up
+                    glm::mat4 M(1.0f);
+                    M[0] *= -1.0f;
+                    r_.draw(wm, T * (glm::translate(glm::mat4(1), glm::vec3(L[3])) * M *
+                                     glm::rotate(glm::mat4(1), -delta, {0, 1, 0}) * S), ids({}));
+                }
             }
         }
         auto lampAt = [&](const std::optional<GpuMesh>& m, glm::vec3 off) {

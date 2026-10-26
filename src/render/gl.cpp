@@ -294,7 +294,8 @@ void GlRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& 
     glUniformMatrix4fv(U(prog3d_, "uModel"), 1, GL_FALSE, glm::value_ptr(model));
     glUniformMatrix4fv(U(prog3d_, "uView"), 1, GL_FALSE, glm::value_ptr(view_));
     glUniformMatrix4fv(U(prog3d_, "uProj"), 1, GL_FALSE, glm::value_ptr(proj_));
-    const glm::mat3 nm = glm::inverseTranspose(glm::mat3(model));
+    glm::mat3 nm = glm::inverseTranspose(glm::mat3(model));
+    if (glm::determinant(glm::mat3(model)) < 0) nm *= -1.0f;  // mirrored draws (far-side wheels): keep normals outward
     glUniformMatrix3fv(U(prog3d_, "uNrm"), 1, GL_FALSE, glm::value_ptr(nm));
     glUniform3fv(U(prog3d_, "uLightDir"), 1, glm::value_ptr(glm::normalize(light_.dir)));
     glUniform3fv(U(prog3d_, "uAmb"), 1, glm::value_ptr(light_.ambient));
