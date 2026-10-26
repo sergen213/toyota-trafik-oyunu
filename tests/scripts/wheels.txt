@@ -1,0 +1,13 @@
+# Wheel rim orientation: rims must face outboard on every wheel (side camera + AI car close-ups).
+wait 0.2
+loadmap 1
+until screen=Game 60
+until idle 30
+key k
+key k
+key k
+shot w_side
+autodrive 4
+cars shot w_car_left 1.6
+cars shot w_car_right 1 -1.6
+quit
