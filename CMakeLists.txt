@@ -128,6 +128,7 @@ target_link_libraries(toyota-trafik PRIVATE tto_core SDL3::SDL3 SDL3_ttf::SDL3_t
 if(WIN32)
   # No console window when double-clicked; validation problems show a message box instead.
   set_target_properties(toyota-trafik PROPERTIES WIN32_EXECUTABLE ON)
+  target_sources(toyota-trafik PRIVATE data/toyota-trafik.rc)
 endif()
 
 install(TARGETS toyota-trafik RUNTIME DESTINATION bin)

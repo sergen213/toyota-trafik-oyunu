@@ -41,7 +41,7 @@ folders (`C:\Program Files (x86)\ToyotaSA\…`, `~/.wine/drive_c/…`) and then 
 only read, never written. Profiles live in the SDL preference folder (`$XDG_DATA_HOME/toyota-trafik/UserData.dat`,
 `%APPDATA%\toyota-trafik\UserData.dat`; same byte format as the original).
 
-## Release artifacts (AppImage and Windows zip)
+## Release artifacts (AppImage, Windows installer and zip)
 
 ```sh
 scripts/package_release.sh            # version from CMakeLists.txt; output in dist/ with .sha256 files
@@ -57,7 +57,7 @@ scripts/package_release.sh            # version from CMakeLists.txt; output in d
   # pacman.conf: [options] Architecture=any, SigLevel=Never, DBPath/CacheDir under work/w64u;
   #              [ucrt64] Server = https://repo.msys2.org/mingw/ucrt64
   unshare -r pacman --config work/w64u/pacman.conf --root work/w64u -Sy --noscriptlet \
-    mingw-w64-ucrt-x86_64-{sdl3,sdl3-ttf,glew,vulkan-loader,vulkan-headers,mpg123,fontconfig,ffmpeg,glm,nlohmann-json,pkgconf,libarchive}
+    mingw-w64-ucrt-x86_64-{sdl3,sdl3-ttf,glew,vulkan-loader,vulkan-headers,mpg123,fontconfig,ffmpeg,glm,nlohmann-json,pkgconf,libarchive,nsis}
   ```
 
   The script bundles every imported DLL found in the prefix (failing on unknown ones), never the Vulkan loader or
@@ -70,3 +70,8 @@ scripts/package_release.sh            # version from CMakeLists.txt; output in d
 scripts/wine_recover.sh setup "<game folder>" ~/tto-wine
 scripts/wine_recover.sh run ~/tto-wine
 ```
+
+- **Windows installer**: `packaging/windows/toyota-trafik.nsi`, compiled by MSYS2's `makensis.exe` under Wine (add
+  `mingw-w64-ucrt-x86_64-nsis` to the prefix). Per-user install into `%LOCALAPPDATA%\Programs\Toyota Trafik Oyunu`;
+  the uninstaller deletes exactly the installed files (generated list) and keeps `%APPDATA%\toyota-trafik`. Check:
+  `wine …-Setup.exe /S`, run the installed exe, then `wine …\uninstall.exe /S`.

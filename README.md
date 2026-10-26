@@ -33,7 +33,9 @@ This repository contains:
 
 ## Download and play
 
-Releases (<https://github.com/sergen213/toyota-trafik-oyunu/releases>) contain a Linux AppImage and a Windows x64 zip.
+Releases (<https://github.com/sergen213/toyota-trafik-oyunu/releases>) contain a Linux AppImage, a Windows x64 installer
+(`…-Setup.exe`, per-user, no administrator rights, Start menu/desktop shortcuts, uninstaller) and the same Windows files as a
+portable zip.
 Neither contains any game file: on first start the program finds your copy, or asks for one of
 
 - **Installed game folder**: the folder containing `TrafikOyunu.exe` (used in place, never written), or

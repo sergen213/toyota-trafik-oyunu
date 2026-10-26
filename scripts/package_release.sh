@@ -52,7 +52,7 @@ STAGE=build-win/ToyotaTrafik-$VER-windows-x64
 rm -rf "$STAGE" && mkdir -p "$STAGE/data"
 x86_64-w64-mingw32-strip -o "$STAGE/toyota-trafik.exe" build-win/toyota-trafik.exe
 cp data/maps.json "$STAGE/data/"
-cp README.md docs/LEGAL.md "${LICENSES[@]}" "$STAGE/"
+cp README.md docs/LEGAL.md "${LICENSES[@]}" data/toyota-trafik.ico "$STAGE/"
 # Fontconfig needs its config next to the DLLs (fonts come from %WINDIR%\Fonts).
 mkdir -p "$STAGE/etc" && cp -r "$W64/etc/fonts" "$STAGE/etc/"
 # DLL closure: every import found in the MSYS2 prefix is bundled; anything else must be a Windows/driver DLL.
@@ -76,8 +76,21 @@ while read -r p; do
   n=${p%-*-*}; n=${n#mingw-w64-ucrt-x86_64-}
   find "$W64/share/licenses" -mindepth 1 -maxdepth 1 -iname "$n" -exec cp -r {} "$STAGE/licenses/" \;
 done <"$STAGE/licenses/bundled-msys2-packages.txt"
-rm -f "$DIST"/ToyotaTrafik-*-windows-x64.zip
+rm -f "$DIST"/ToyotaTrafik-*-windows-x64.zip "$DIST"/ToyotaTrafik-*-windows-x64-Setup.exe
 (cd build-win && zip -qr9 "$DIST/ToyotaTrafik-$VER-windows-x64.zip" "$(basename "$STAGE")")
+
+# --- Windows installer (NSIS from the MSYS2 prefix, run under Wine) ---
+UNINST=build-win/uninstall.nsh
+winpath() { echo "Z:$(realpath "$1" | tr / '\\')"; }
+{
+  (cd "$STAGE" && find . -type f | sort) | sed 's|^\./||; s|/|\\|g; s|.*|Delete "$INSTDIR\\&"|'
+  (cd "$STAGE" && find . -mindepth 1 -type d | sort -r) | sed 's|^\./||; s|/|\\|g; s|.*|RMDir "$INSTDIR\\&"|'
+} >"$UNINST"
+SETUP=$DIST/ToyotaTrafik-$VER-windows-x64-Setup.exe
+WINEPREFIX=${WINEPREFIX:-$ROOT/work/nsis-prefix} WINEDEBUG=-all wine "$W64/bin/makensis.exe" -V2 -INPUTCHARSET UTF8 \
+  "-DVERSION=$VER" "-DSTAGE=$(winpath "$STAGE")" "-DUNINSTALL_LIST=$(winpath "$UNINST")" \
+  "-DOUTFILE=$(winpath "$DIST")\\$(basename "$SETUP")" "$(winpath packaging/windows/toyota-trafik.nsi)"
+[[ -s $SETUP ]] || { echo "installer not built" >&2; exit 1; }
 
 # --- check: no proprietary game files, checksums ---
 for a in "$DIST"/ToyotaTrafik-$VER-*; do

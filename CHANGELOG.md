@@ -11,7 +11,8 @@
 - Renderer interface with a Vulkan 1.3 backend (default): ray-traced shadows, AMD FSR 3.1.4 upscaling and frame
   generation (FidelityFX SDK subset from the IKV port); OpenGL 3.3 fallback.
 - Tests: Sim-level world tests, SMD skinning test, music-list editor, OpenGL and FSR+frame-generation playthroughs.
-- Windows x64 build (MinGW-w64 cross build against MSYS2 ucrt64) and Linux AppImage: `scripts/package_release.sh`.
+- Windows x64 build (MinGW-w64 cross build against MSYS2 ucrt64) as an NSIS installer and a portable zip, and a Linux
+  AppImage: `scripts/package_release.sh`.
 - First-start game discovery: remembered folder, default install folders, then a dialog offering the installed game
   folder, the setup CD folder or the setup `.rar` (imported once into the profile folder, v2 preferred); `--import`.
 - Profiles and the base path come from SDL (`%APPDATA%\toyota-trafik` on Windows); invalid game folders show a
