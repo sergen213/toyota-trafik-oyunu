@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace tto {
@@ -17,6 +18,8 @@ public:
     bool valid() const { return valid_; }
     // Delphi AnsiString literal (int32 length at va-4), returned as UTF-8.
     std::optional<std::string> ansi(std::uint32_t va) const;
+    // Ansi string or `fallback` when unavailable.
+    std::string ansi_or(std::uint32_t va, std::string_view fallback) const;
 
 private:
     std::optional<std::size_t> offset(std::uint32_t va) const;

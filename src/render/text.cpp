@@ -36,8 +36,8 @@ bool TextRenderer::init(Renderer& r) {
     }
     const std::string sans = match_font("sans-serif");
     const std::string bold = match_font("sans-serif:bold");
-    struct { const std::string* file; float size; } spec[4] = {{&bold, 15}, {&sans, 13}, {&bold, 13}, {&bold, 18}};
-    for (int i = 0; i < 4; ++i) {
+    struct { const std::string* file; float size; } spec[6] = {{&bold, 15}, {&sans, 13}, {&bold, 12}, {&bold, 17}, {&bold, 28}, {&bold, 14}};
+    for (int i = 0; i < 6; ++i) {
         fonts_[i] = TTF_OpenFont(spec[i].file->c_str(), spec[i].size);
         if (!fonts_[i]) {
             log_error("TTF_OpenFont {}: {}", *spec[i].file, SDL_GetError());
@@ -117,6 +117,50 @@ void TextRenderer::draw_shadowed(const std::string& s, float x, float y, Font f,
 float TextRenderer::width(const std::string& s, Font f) {
     const Texture* t = get(s, f);
     return t ? static_cast<float>(t->w) : 0.0f;
+}
+
+std::vector<std::string> TextRenderer::wrap(const std::string& s, Font f, float maxW) {
+    std::vector<std::string> out;
+    std::size_t p = 0;
+    while (p <= s.size()) {
+        std::size_t e = s.find('\n', p);
+        std::string para = s.substr(p, e == std::string::npos ? std::string::npos : e - p);
+        if (!para.empty() && para.back() == '\r') para.pop_back();
+        std::string line;
+        std::size_t q = 0;
+        while (q <= para.size()) {
+            std::size_t sp = para.find(' ', q);
+            const std::string word = para.substr(q, sp == std::string::npos ? std::string::npos : sp - q);
+            const std::string cand = line.empty() ? word : line + " " + word;
+            if (!line.empty() && width(cand, f) > maxW) {
+                out.push_back(line);
+                line = word;
+            } else {
+                line = cand;
+            }
+            if (sp == std::string::npos) break;
+            q = sp + 1;
+        }
+        out.push_back(line);
+        if (e == std::string::npos) break;
+        p = e + 1;
+    }
+    return out;
+}
+
+void TextRenderer::draw_lines(const std::string& s, float x, float y, Font f, glm::vec4 c, int align, float lh, bool shadow) {
+    if (lh <= 0) lh = line_height(f);
+    std::size_t p = 0;
+    while (p <= s.size()) {
+        std::size_t e = s.find('\n', p);
+        std::string line = s.substr(p, e == std::string::npos ? std::string::npos : e - p);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (shadow) draw_shadowed(line, x, y, f, c, align);
+        else draw(line, x, y, f, c, align);
+        y += lh;
+        if (e == std::string::npos) break;
+        p = e + 1;
+    }
 }
 
 float TextRenderer::line_height(Font f) { return static_cast<float>(TTF_GetFontLineSkip(font(f))); }

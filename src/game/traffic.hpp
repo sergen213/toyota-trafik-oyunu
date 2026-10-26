@@ -65,6 +65,7 @@ public:
     void update(double dt, const DriveInput& input);
     void set_paused(bool p);
     bool paused() const { return paused_; }
+    void reset_clock() { time_ = 0; }
     double time() const { return time_; }  // map clock: HUD "Süre", stops while paused
     double wall() const { return wall_; }  // cadencer/wall clock: lights, cooldowns
 

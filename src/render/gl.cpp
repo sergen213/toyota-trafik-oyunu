@@ -268,9 +268,12 @@ void Renderer::destroy(GpuMesh& m) {
 }
 
 void Renderer::begin_frame(int w, int h, const glm::vec3& c) {
-    glViewport(0, 0, w, h);
+    glViewport(vpx_, vpy_, w, h);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(vpx_, vpy_, w, h);
     glClearColor(c.r, c.g, c.b, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_SCISSOR_TEST);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
 }
@@ -344,6 +347,7 @@ void Renderer::draw_sky(const std::array<const Texture*, 6>& faces) {
 
 void Renderer::begin_2d(int w, int h) {
     ortho_ = glm::ortho(0.0f, static_cast<float>(w), static_cast<float>(h), 0.0f);
+    glViewport(vpx_, vpy_, vpw_, vph_);
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

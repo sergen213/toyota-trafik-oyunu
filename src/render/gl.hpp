@@ -60,6 +60,9 @@ public:
     void destroy(GpuMesh& m);
 
     void begin_frame(int w, int h, const glm::vec3& clear);
+    // Letterbox: begin_frame/begin_2d draw into a w x h viewport at this window offset.
+    // begin_2d maps its logical size onto the pixel rectangle (x, y, w, h).
+    void set_viewport(int x, int y, int w, int h) { vpx_ = x; vpy_ = y; vpw_ = w; vph_ = h; }
     void set_camera(const glm::mat4& view, const glm::mat4& proj);
     void set_light(const Light& l) { light_ = l; }
     void set_fog(const Fog& f) { fog_ = f; }
@@ -78,6 +81,7 @@ public:
     Image read_pixels(int w, int h) const;
 
 private:
+    int vpx_ = 0, vpy_ = 0, vpw_ = 1, vph_ = 1;
     GLuint prog3d_ = 0, prog2d_ = 0, quadVao_ = 0, quadVbo_ = 0, skyVao_ = 0, skyVbo_ = 0;
     glm::mat4 view_{1}, proj_{1}, ortho_{1};
     Light light_;

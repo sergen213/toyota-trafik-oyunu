@@ -62,7 +62,8 @@ std::vector<MapData> load_maps(const std::filesystem::path& path) {
             d.roads.push_back(mr);
         }
         for (const auto& w : m.at("sidewalks")) {
-            MapWalk mw{checkNode(w.at("a")), checkNode(w.at("b")), w.at("width"), w.at("len"), w.at("crossing"), w.at("road")};
+            MapWalk mw{checkNode(w.at("a")), checkNode(w.at("b")), w.at("width"), w.at("len"), w.at("crossing"),
+                       w.at("road").is_null() ? -1 : w.at("road").get<int>()};
             setConn(w.at("id"), 1, static_cast<int>(d.walks.size()));
             d.walks.push_back(mw);
         }
@@ -111,7 +112,9 @@ std::vector<MapData> load_maps(const std::filesystem::path& path) {
             mm.relative = me.contains("relative_to");
             d.meshes.push_back(mm);
         }
-        for (const auto& b : m.at("static_boxes")) d.boxes.push_back({v3(b.at("center")), v3(b.at("size")), v3(b.at("facing"))});
+        for (const auto& b : m.at("static_boxes"))
+            if (!b.at("size").is_null())  // shortcut: 4 Şehir boxes whose size the emulator did not recover are skipped
+                d.boxes.push_back({v3(b.at("center")), v3(b.at("size")), v3(b.at("facing"))});
         for (const auto& c : m.at("car_placement")) {
             const std::string car = c.at("car");
             d.cars.push_back({std::stoi(car.substr(3)), c.at("a"), c.at("b"), c.at("dist_from_a"), c.at("p5")});

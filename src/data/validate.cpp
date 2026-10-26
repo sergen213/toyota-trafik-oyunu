@@ -52,7 +52,7 @@ ValidationReport validate_game_dir(const GameFs& fs) {
         if (!res.contains("TGIRISFORM") || !res.contains("TFORMOYUN")) throw std::runtime_error("not the Toyota Trafik Oyunu executable");
         const auto oyun = parse_dfm(res.at("TFORMOYUN"));
         // v2 ("Hızlı Bilgisayarlar İçin") enables 2x anti-aliasing (docs/GAME_IDENTITY.md).
-        const auto* v = oyun.find("GLFullScreenViewer1");
+        const auto* v = oyun.find("GLFullScreenViewer");
         r.version = v && v->text("Buffer.AntiAliasing") == "aa2xHQ" ? "v2" : "v1";
     });
     return r;

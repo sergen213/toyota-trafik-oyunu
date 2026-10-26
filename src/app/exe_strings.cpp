@@ -47,4 +47,9 @@ std::optional<std::string> ExeStrings::ansi(std::uint32_t va) const {
     return cp1254_to_utf8(std::string(reinterpret_cast<const char*>(d_.data() + *o), n));
 }
 
+std::string ExeStrings::ansi_or(std::uint32_t va, std::string_view fb) const {
+    if (auto s = ansi(va)) return *s;
+    return std::string(fb);
+}
+
 }  // namespace tto

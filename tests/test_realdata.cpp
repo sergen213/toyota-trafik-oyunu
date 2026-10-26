@@ -44,3 +44,12 @@ TEST(RealData, Every3dsUnderBolumlerParses) {
     }
     EXPECT_GT(n, 10);
 }
+
+#include "data/mapdata.hpp"
+TEST(MapData, ProjectMapsJsonLoads) {
+    const auto maps = load_maps(TTO_SOURCE_DIR "/data/maps.json");
+    ASSERT_GE(maps.size(), 4u);
+    EXPECT_EQ(maps[0].name, "Eğitim Sahası (Talim)");
+    EXPECT_FALSE(maps[0].roads.empty());
+    EXPECT_FALSE(maps[0].signs.empty());
+}

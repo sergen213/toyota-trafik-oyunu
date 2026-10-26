@@ -22,6 +22,7 @@ pkg_check_modules(MPG123 REQUIRED IMPORTED_TARGET libmpg123)
 pkg_check_modules(FONTCONFIG REQUIRED IMPORTED_TARGET fontconfig)
 include(cmake/ODE.cmake)
 find_package(glm CONFIG REQUIRED)
+find_package(nlohmann_json REQUIRED)
 find_path(STB_INCLUDE_DIR stb_image.h PATH_SUFFIXES stb REQUIRED)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -44,7 +45,7 @@ add_library(tto_core STATIC
   src/game/quiz.cpp
 )
 target_include_directories(tto_core PUBLIC src)
-target_link_libraries(tto_core PUBLIC tto_ode glm::glm)
+target_link_libraries(tto_core PUBLIC tto_ode glm::glm nlohmann_json::nlohmann_json)
 target_compile_definitions(tto_core PUBLIC GLM_ENABLE_EXPERIMENTAL)
 
 option(TTO_BUILD_GAME "Build the game executable" ON)
@@ -54,6 +55,8 @@ add_executable(toyota-trafik
   src/app/app.cpp
   src/app/scene.cpp
   src/app/menu.cpp
+  src/app/game.cpp
+  src/app/exe_strings.cpp
   src/platform/audio.cpp
   src/render/image.cpp
   src/render/gl.cpp
@@ -81,6 +84,7 @@ if(TTO_BUILD_TESTS)
     tests/test_dfm.cpp
   )
   target_link_libraries(tto_tests PRIVATE tto_core GTest::gtest_main)
+  target_compile_definitions(tto_tests PRIVATE TTO_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
   include(GoogleTest)
   gtest_discover_tests(tto_tests)
 endif()

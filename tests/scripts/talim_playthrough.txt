@@ -1,0 +1,61 @@
+# Full path: title -> help -> new driver -> licence quiz -> map select -> Eğitim Sahası -> drive -> report.
+wait 0.5
+shot 01_title
+click 510 620
+wait 0.5
+shot 02_help
+click 502 678
+until screen=DriverList 5
+click 460 720
+until screen=NewDriver 5
+click 540 530
+type Test
+click 540 553
+type Kisi
+click 540 602
+type Istanbul
+shot 03_form
+click 462 705
+until screen=Main 5
+shot 04_main
+click 227 360
+wait 0.5
+shot 05_quiz
+quiz
+quiz
+quiz
+quiz
+quiz
+quiz
+quiz
+quiz
+expect quizpassed
+shot 06_quiz_passed
+click 340 360
+until screen=MapSelect 5
+shot 07_mapselect
+click 342 540
+until screen=Loading 5
+shot 08_loading
+until screen=Game 30
+until started 10
+wait 2
+shot 09_game_start
+until idle 30
+hold up 6
+shot 10_driving
+sign
+wait 0.1
+shot 11_sign_answered
+until idle 30
+
+log sign question flow done
+wait 12
+shot 12_after_sign
+until report 300
+shot 13_report
+key enter
+wait 1
+shot 14_after_report
+expect screen=Game
+quit
