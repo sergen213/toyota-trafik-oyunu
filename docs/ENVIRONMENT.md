@@ -29,5 +29,5 @@ Clang 23 in `-std=c++23` mode: both pass.
 
 ## Pinned dependency policy
 
-Only distribution packages are used; no vendored third-party code except the header-only stb from the
-system `stb` package. Minimum versions are enforced by `find_package`/`pkg_check_modules` in `CMakeLists.txt`.
+Distribution packages are used (including header-only stb from the `stb` package). The one bundled third-party
+source is the pinned ODE 0.16.6 tarball (`third_party/`, BSD, SHA-256 checked), used when no system `ode` is found. Minimum versions are enforced by `find_package`/`pkg_check_modules` in `CMakeLists.txt`.
