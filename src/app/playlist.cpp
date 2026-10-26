@@ -80,8 +80,8 @@ bool App::playlist_save() {
 void App::playlist_open() {
     pl_.list = playlist_;
     if (pl_.dir.empty()) {
-        const char* h = std::getenv("HOME");
-        pl_.dir = h ? std::filesystem::path(h) : std::filesystem::current_path();
+        const char* h = SDL_GetUserFolder(SDL_FOLDER_HOME);
+        pl_.dir = h ? std::filesystem::path(reinterpret_cast<const char8_t*>(h)) : std::filesystem::current_path();
         if (auto m = pl_.dir / "Music"; std::filesystem::is_directory(m)) pl_.dir = m;
     }
     pl_.scan();

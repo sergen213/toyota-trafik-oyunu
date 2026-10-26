@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Toyota Trafik Oyunu
+Comment=Native port of Cancan ile Toyota Trafik Oyunu (needs your own copy of the game)
+Exec=toyota-trafik
+Icon=toyota-trafik
+Categories=Game;Education;
+Terminal=false

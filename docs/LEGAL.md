@@ -13,5 +13,10 @@
   No DRM, activation or licence check exists in the game (see `FAILURE_ANALYSIS.md`), so none was bypassed.
 - Third-party code: ODE (BSD, `third_party/ode-LICENSE-BSD.TXT`) when built from the pinned tarball; AMD FidelityFX
   SDK v1.1.4 subset (MIT, `third_party/FidelityFX-SDK/LICENSE.txt`, provenance in `PROVENANCE.txt`); system
-  libraries (SDL3, SDL3_ttf, GLEW, Vulkan loader, FFmpeg, mpg123, stb, GoogleTest) under their own licences.
-- Before any public release, re-run the tracked-file check in `TESTING.md` and keep releases free of game data.
+  libraries (SDL3, SDL3_ttf, GLEW, Vulkan loader, FFmpeg, mpg123, libarchive, stb, GoogleTest) under their own licences.
+- Binary releases (AppImage, Windows zip) bundle third-party shared libraries (Arch Linux / MSYS2 ucrt64 builds,
+  including LGPL/GPL FFmpeg components). Each package ships their licence texts and the exact package list
+  (`bundled-packages.txt`, `licenses/bundled-msys2-packages.txt`); corresponding sources are those of the listed
+  Arch Linux and MSYS2 (https://github.com/msys2/MINGW-packages) package versions.
+- Before any public release, re-run the tracked-file check in `TESTING.md` and keep releases free of game data;
+  `scripts/package_release.sh` rejects game-file extensions in the Windows zip.

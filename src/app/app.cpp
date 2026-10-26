@@ -49,9 +49,9 @@ bool App::init() {
     // Profiles: the native game keeps its own UserData.dat; the original install is never written.
     std::filesystem::path save = opt_.saveDir;
     if (save.empty()) {
-        const char* x = std::getenv("XDG_DATA_HOME");
-        const char* h = std::getenv("HOME");
-        save = x && *x ? std::filesystem::path(x) / "toyota-trafik" : std::filesystem::path(h ? h : ".") / ".local/share/toyota-trafik";
+        char* pref = SDL_GetPrefPath("", "toyota-trafik");
+        save = pref ? std::filesystem::path(reinterpret_cast<const char8_t*>(pref)) : std::filesystem::path("toyota-trafik");
+        SDL_free(pref);
     }
     std::filesystem::create_directories(save);
     userDataPath_ = save / "UserData.dat";

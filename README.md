@@ -1,4 +1,4 @@
-# Cancan ile Toyota Trafik Oyunu — preservation and native Linux port
+# Cancan ile Toyota Trafik Oyunu — preservation and native Linux/Windows port
 
 *Toyota Trafik Oyunu* is a 2006–07 traffic-education game for primary-school children. It was commissioned by
 ToyotaSA and developed by Martı Animasyon (Delphi 7 + GLScene + oxGLODE). The game is abandoned. On modern systems
@@ -31,7 +31,23 @@ This repository contains:
 | Menus / input | music-list editor (TfrmPlaylister), joystick mode (`j`), radio volume `z`/`x`, `t`/`y` take over a car |
 | Rendering | Vulkan 1.3 (default) with optional ray-traced shadows, AMD FSR 3.1.4 upscaling and frame generation; OpenGL 3.3 fallback |
 
-## Quick start
+## Download and play
+
+Releases (<https://github.com/sergen213/toyota-trafik-oyunu/releases>) contain a Linux AppImage and a Windows x64 zip.
+Neither contains any game file: on first start the program finds your copy, or asks for one of
+
+- **Installed game folder**: the folder containing `TrafikOyunu.exe` (used in place, never written), or
+- **Setup folder (CD)**: the CD or a copy of it (`Kurulum1`/`Kurulum2`), or
+- **Setup .rar file**: an archive of that CD.
+
+Setup media is imported once into the profile folder (`~/.local/share/toyota-trafik/game`, on Windows
+`%APPDATA%\toyota-trafik\game`); v2 (`Kurulum2`) is preferred when both versions are present. The choice is remembered.
+From a terminal: `--game <folder>` or `--import <setup folder | .rar>`.
+
+The AppImage is built on Arch Linux and needs an equally recent glibc. Vulkan needs a Vulkan 1.3 driver; otherwise
+OpenGL 3.3 is used.
+
+## Building
 
 ```sh
 scripts/check_toolchain.sh                       # GCC/Clang C++23 sanity check
@@ -39,6 +55,8 @@ cmake -S . -B build -G Ninja && ninja -C build
 build/toyota-trafik --game "/path/to/Toyota Trafik Oyunu v2" --check   # validate data
 build/toyota-trafik --game "/path/to/Toyota Trafik Oyunu v2"
 ```
+
+`scripts/package_release.sh` builds both release artifacts (see `docs/BUILDING.md`).
 
 Controls follow the original: arrows drive, `f` brake, SPACE pause and question mode (click signs or
 offending cars or pedestrians), `c`/`v` signals, `h` horn, `k`/`l`/`o` camera, `m`/`n`/`z`/`x` radio, `j` joystick,

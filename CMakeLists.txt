@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(ToyotaTrafikOyunuNative VERSION 0.1.0 LANGUAGES C CXX)
+project(ToyotaTrafikOyunuNative VERSION 0.2.0 LANGUAGES C CXX)
 
 # C++26 is technically complete in WG21 but ISO 14882:2026 is still a DIS
 # (see docs/ENVIRONMENT.md), so the project uses C++23.
@@ -43,13 +43,15 @@ add_library(tto_core STATIC
   src/formats/dfm.cpp
   src/data/validate.cpp
   src/game/vehicle.cpp
+  src/data/import.cpp
   src/game/traffic.cpp
   src/game/world.cpp
   src/game/rules.cpp
   src/game/quiz.cpp
 )
 target_include_directories(tto_core PUBLIC src)
-target_link_libraries(tto_core PUBLIC tto_ode glm::glm nlohmann_json::nlohmann_json)
+find_package(LibArchive REQUIRED)
+target_link_libraries(tto_core PUBLIC tto_ode glm::glm nlohmann_json::nlohmann_json LibArchive::LibArchive)
 target_compile_definitions(tto_core PUBLIC GLM_ENABLE_EXPERIMENTAL)
 
 option(TTO_BUILD_GAME "Build the game executable" ON)
@@ -123,6 +125,10 @@ add_dependencies(toyota-trafik tto_shaders)
 target_include_directories(toyota-trafik PRIVATE ${STB_INCLUDE_DIR} ${TTO_SPV_DIR})
 target_link_libraries(toyota-trafik PRIVATE tto_core SDL3::SDL3 SDL3_ttf::SDL3_ttf
   OpenGL::GL GLEW::GLEW Vulkan::Vulkan PkgConfig::MPG123 PkgConfig::FONTCONFIG PkgConfig::FFMPEG)
+if(WIN32)
+  # No console window when double-clicked; validation problems show a message box instead.
+  set_target_properties(toyota-trafik PROPERTIES WIN32_EXECUTABLE ON)
+endif()
 
 install(TARGETS toyota-trafik RUNTIME DESTINATION bin)
 # The binary finds maps.json in <bindir>/data or <prefix>/share/toyota-trafik.
@@ -144,6 +150,7 @@ if(TTO_BUILD_TESTS)
     tests/test_realdata.cpp
     tests/test_dfm.cpp
     tests/test_world.cpp
+    tests/test_import.cpp
   )
   target_link_libraries(tto_tests PRIVATE tto_core GTest::gtest_main)
   target_compile_definitions(tto_tests PRIVATE TTO_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

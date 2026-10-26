@@ -11,7 +11,7 @@ Milestones from goal.txt §14. Evidence is in brackets.
 | 5 | Native foundation | **Done** [CMake/Ninja build, ctest] |
 | 6 | Display actual content | **Done** [all 5 maps render original scenery/cars/signs; menus from the user's executable] |
 | 7 | Playable gameplay | **Done for Eğitim Sahası** [playthrough tests: quiz → map 1 → pass with 150+ points → report → map 2] |
-| 8 | Complete and preserve | **Partial**: see gaps below; no public release yet (needs owner approval) |
+| 8 | Complete and preserve | **Partial**: see gaps below. Public repository and 0.2.0 release (AppImage + Windows zip, no game data) |
 
 ## Implemented since 0.1.0
 

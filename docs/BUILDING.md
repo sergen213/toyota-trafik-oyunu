@@ -1,10 +1,10 @@
-# Building and installing (CachyOS / Arch Linux)
+# Building and installing
 
 ## Dependencies (distribution packages)
 
 ```sh
 sudo pacman -S --needed base-devel cmake ninja git sdl3 sdl3_ttf glew glm mpg123 fontconfig stb nlohmann-json gtest noto-fonts \
-    vulkan-headers vulkan-icd-loader shaderc ffmpeg python
+    vulkan-headers vulkan-icd-loader shaderc ffmpeg python libarchive
 # optional: vulkan-validation-layers (VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation)
 ```
 
@@ -35,8 +35,34 @@ to override.
 Install the game with Wine or copy the folder straight from the CD:
 `Kurulum2/program files/ToyotaSA/Toyota Trafik Oyunu v2/` (v2) or `Kurulum1/.../Toyota Trafik Oyunu/` (v1).
 The CD folder can be used as-is, because the MSI only copies files. Pass the folder with `--game` or set
-`TTO_GAME_DIR`. The game folder is only read, never written. Profiles live in `$XDG_DATA_HOME/toyota-trafik/UserData.dat`
-(same byte format as the original).
+`TTO_GAME_DIR`; or let the program import it: `--import <CD folder | Kurulum folder | setup .rar>` copies the game
+tree (v2 preferred) into `<profile dir>/game`. Without either, it tries the remembered folder, the default install
+folders (`C:\Program Files (x86)\ToyotaSA\…`, `~/.wine/drive_c/…`) and then asks with a dialog. The game folder is
+only read, never written. Profiles live in the SDL preference folder (`$XDG_DATA_HOME/toyota-trafik/UserData.dat`,
+`%APPDATA%\toyota-trafik\UserData.dat`; same byte format as the original).
+
+## Release artifacts (AppImage and Windows zip)
+
+```sh
+scripts/package_release.sh            # version from CMakeLists.txt; output in dist/ with .sha256 files
+```
+
+- **AppImage**: `linuxdeploy.appimage` collects the libraries; the untouched Arch copies are then put back (its
+  patchelf corrupts current Arch libraries) and `AppRun` sets `LD_LIBRARY_PATH`; `appimagetool` packs it. The
+  Vulkan loader, glibc and GPU drivers come from the host.
+- **Windows**: MinGW-w64 cross build (`cmake/mingw-w64.cmake`) against an MSYS2 **ucrt64** prefix (same CRT as Arch's
+  mingw-w64 toolchain). Create the prefix without root:
+
+  ```sh
+  # pacman.conf: [options] Architecture=any, SigLevel=Never, DBPath/CacheDir under work/w64u;
+  #              [ucrt64] Server = https://repo.msys2.org/mingw/ucrt64
+  unshare -r pacman --config work/w64u/pacman.conf --root work/w64u -Sy --noscriptlet \
+    mingw-w64-ucrt-x86_64-{sdl3,sdl3-ttf,glew,vulkan-loader,vulkan-headers,mpg123,fontconfig,ffmpeg,glm,nlohmann-json,pkgconf,libarchive}
+  ```
+
+  The script bundles every imported DLL found in the prefix (failing on unknown ones), never the Vulkan loader or
+  OpenGL, plus the licences of the bundled MSYS2 packages. Check under Wine:
+  `wine toyota-trafik.exe --import 'Z:\…\setup.rar' --check`.
 
 ## Running the original instead (reference / comparison)
 

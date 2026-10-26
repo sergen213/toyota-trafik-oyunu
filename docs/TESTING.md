@@ -19,6 +19,7 @@ TTO_GAME_DIR="/path/to/Toyota Trafik Oyunu v2" xvfb-run -a -s "-screen 0 1280x10
 | Rules / Quiz | penalty/bonus values, messages, report counters, school-bus reset quirk; quiz pass/fail rules, Ehliyet-only pool, no immediate repeat |
 | Vehicle | input ramps and clamps, forward = +Z on ground, positive steer turns right (ODE car) |
 | MapData | `data/maps.json` loads |
+| Import | setup-folder and archive import: v2 tree preferred over v1, only the game tree extracted, `..` entries rejected, failed import keeps the previous one |
 | RealData (needs `TTO_GAME_DIR`) | 71+79 questions, HG.vdd, all 178 real 3DS files parse, real TGIRISFORM/TFORMOYUN forms |
 
 ## Playthrough tests (need `TTO_GAME_DIR` and an X display; exit 77 = skipped)

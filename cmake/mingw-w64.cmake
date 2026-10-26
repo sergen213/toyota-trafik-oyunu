@@ -1,0 +1,17 @@
+# MinGW-w64 x86_64 cross build. TTO_W64_ROOT is an MSYS2 mingw64 prefix (see scripts/package_windows.sh).
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)
+set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
+set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+set(TTO_W64_ROOT "$ENV{TTO_W64_ROOT}" CACHE PATH "MSYS2 mingw64 prefix")
+set(CMAKE_FIND_ROOT_PATH ${TTO_W64_ROOT} /usr/x86_64-w64-mingw32)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+set(ENV{PKG_CONFIG_LIBDIR} ${TTO_W64_ROOT}/lib/pkgconfig:${TTO_W64_ROOT}/share/pkgconfig)
+set(ENV{PKG_CONFIG_SYSROOT_DIR} ${TTO_W64_ROOT}/..)
+set(ENV{PKG_CONFIG_PATH} "")
+# The MSYS2 DLLs bring their own libstdc++; keep ours inside the executable.
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic")
