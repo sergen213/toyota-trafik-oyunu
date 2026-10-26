@@ -1,0 +1,102 @@
+# Pass Eğitim Sahası by answering sign questions, then continue to map 2 (Kasaba).
+wait 0.3
+click 510 620
+click 502 678
+until screen=DriverList 5
+click 460 720
+until screen=NewDriver 5
+click 540 530
+type Gecer
+click 540 602
+type Ankara
+click 462 705
+until screen=Main 5
+click 227 360
+wait 0.3
+quiz
+quiz
+quiz
+quiz
+quiz
+quiz
+quiz
+quiz
+expect quizpassed
+click 340 360
+until screen=MapSelect 5
+click 342 540
+until screen=Game 30
+until idle 30
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+autodrive 6
+sign
+until idle 30
+skipif score>=150 enough
+label enough
+shot p1_points
+expect score>=150
+key F4
+until menuq 60
+shot p2_passed_menu
+expect unlocked>=2
+answer 1
+until report 5
+shot p3_report
+key enter
+until map=2 10
+until screen=Game 60
+wait 2
+shot p4_kasaba
+expect map=2
+quit

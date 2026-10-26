@@ -40,6 +40,7 @@ std::optional<std::size_t> ExeStrings::offset(std::uint32_t va) const {
 }
 
 std::optional<std::string> ExeStrings::ansi(std::uint32_t va) const {
+    if (!secs_.size()) return std::nullopt;
     const auto o = offset(va);
     if (!o || *o < 4) return std::nullopt;
     const std::uint32_t n = rd32(d_, *o - 4);
@@ -50,6 +51,23 @@ std::optional<std::string> ExeStrings::ansi(std::uint32_t va) const {
 std::string ExeStrings::ansi_or(std::uint32_t va, std::string_view fb) const {
     if (auto s = ansi(va)) return *s;
     return std::string(fb);
+}
+
+std::string ExeStrings::short_or(std::uint32_t va, std::string_view fb) const {
+    const auto o = offset(va);
+    if (!valid_ || !o || *o >= d_.size()) return std::string(fb);
+    const std::size_t n = d_[*o];
+    if (n == 0 || *o + 1 + n > d_.size()) return std::string(fb);
+    return cp1254_to_utf8(std::string(reinterpret_cast<const char*>(d_.data() + *o + 1), n));
+}
+
+std::string ExeStrings::pchar_or(std::uint32_t va, std::string_view fb) const {
+    const auto o = offset(va);
+    if (!valid_ || !o) return std::string(fb);
+    std::size_t e = *o;
+    while (e < d_.size() && d_[e] && e - *o < 4096) ++e;
+    if (e == *o || e >= d_.size()) return std::string(fb);
+    return cp1254_to_utf8(std::string(reinterpret_cast<const char*>(d_.data() + *o), e - *o));
 }
 
 }  // namespace tto

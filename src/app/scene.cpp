@@ -117,7 +117,17 @@ std::optional<std::filesystem::path> Scene::resolve(const std::string& tex, cons
     return std::nullopt;
 }
 
-GpuMesh Scene::load_mesh(const std::string& winPath, const glm::mat4& bake, const std::vector<std::string>& dirs) {
+GpuMesh Scene::load_mesh(const std::string& winPath0, const glm::mat4& bake, const std::vector<std::string>& dirs) {
+    // Map builders use paths relative to the game dir or, for maps 2-4, to Bolumler\IlkHarita
+    // (GLScene media search path); a leading backslash is ignored.
+    std::string winPath = winPath0;
+    while (!winPath.empty() && (winPath[0] == '\\' || winPath[0] == '/')) winPath.erase(0, 1);
+    if (!fs_.find(winPath))
+        for (const char* base : {"Bolumler\\IlkHarita\\", "Bolumler\\Diger\\"})
+            if (fs_.find(base + winPath)) {
+                winPath = base + winPath;
+                break;
+            }
     const auto path = fs_.need(winPath);
     auto dirsAll = dirs;
     const auto slash = winPath.find_last_of("\\/");

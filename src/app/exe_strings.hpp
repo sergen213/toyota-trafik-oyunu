@@ -20,6 +20,10 @@ public:
     std::optional<std::string> ansi(std::uint32_t va) const;
     // Ansi string or `fallback` when unavailable.
     std::string ansi_or(std::uint32_t va, std::string_view fallback) const;
+    // Delphi ShortString literal (length byte at va), UTF-8, or fallback.
+    std::string short_or(std::uint32_t va, std::string_view fallback) const;
+    // Null-terminated PChar literal at va, UTF-8, or fallback.
+    std::string pchar_or(std::uint32_t va, std::string_view fallback) const;
 
 private:
     std::optional<std::size_t> offset(std::uint32_t va) const;

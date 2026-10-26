@@ -277,6 +277,7 @@ void App::run_script(double) {
         if (c.starts_with("unlocked>=")) return profile_ && profile_->unlocked() >= std::stoi(c.substr(10));
         if (c.starts_with("map=")) return mapIndex_ == std::stoi(c.substr(4));
         if (c == "started") return started_;
+        if (c == "paused") return sim_ && sim_->paused();
         if (c == "idle") return started_ && gameTime_ >= speechUntil_ && pendingFile_.empty();
         return false;
     };
@@ -335,8 +336,33 @@ void App::run_script(double) {
                 menu_click({rc->x + rc->z / 2, rc->y + rc->w / 2}, false);
                 waitUntil_ = clock_ + 0.2;
             } else if (s.cmd == "sign" || s.cmd == "signwrong") {
-                signclick(s.cmd == "sign");
+                try {
+                    signclick(s.cmd == "sign");
+                } catch (const std::exception& e) {
+                    log_warn("script line {}: {}", s.line, e.what());  // not fatal: the next attempt drives further
+                    if (sim_ && sim_->paused() && !panel_.open) sim_->set_paused(false);
+                }
                 waitUntil_ = clock_ + 0.2;
+            } else if (s.cmd == "answer") {
+                const int tag = std::stoi(arg(0));
+                const auto rects = panel_line_rects();
+                bool done = false;
+                for (std::size_t i = 0; i < panel_.tags.size() && !done; ++i)
+                    if (panel_.tags[i] == tag) {
+                        game_click({rects[i].x + 5, rects[i].y + rects[i].w / 2}, {});
+                        done = true;
+                    }
+                if (!done) throw std::runtime_error("no panel line with tag " + arg(0));
+                waitUntil_ = clock_ + 0.2;
+            } else if (s.cmd == "label") {
+            } else if (s.cmd == "skipif") {
+                if (cond(arg(0))) {
+                    while (stepIdx_ < steps_.size() && !(steps_[stepIdx_].cmd == "label" && steps_[stepIdx_].args.size() && steps_[stepIdx_].args[0] == arg(1))) ++stepIdx_;
+                    if (stepIdx_ == steps_.size()) throw std::runtime_error("label not found: " + arg(1));
+                }
+            } else if (s.cmd == "autodrive") {
+                autodriveUntil_ = gameTime_ + num(0);
+                waitUntil_ = clock_ + num(0);
             } else if (s.cmd == "until") {
                 waitFor_ = arg(0);
                 waitDeadline_ = clock_ + (s.args.size() > 1 ? num(1) : 30.0);

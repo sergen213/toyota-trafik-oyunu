@@ -1,6 +1,7 @@
 // In-game flow (TFormOyun): map start, HUD, keys, question panel, map end, report.
 // Behaviour follows docs/re/RULES.md §3 and docs/re/DRIVING.md §2/§7; HUD canvas is 800x600.
 #include <algorithm>
+#include <cmath>
 #include <format>
 
 #include "app/app.hpp"
@@ -115,6 +116,11 @@ void App::game_update(double dt) {
             started_ = true;
             speechUntil_ = gameTime_ + speech("sesler\\giris", "giris001.wav");
         }
+    }
+    if (gameTime_ < autodriveUntil_) autodrive_step();
+    else if (autodriveUntil_ > 0) {
+        autodriveUntil_ = 0;
+        keys_[0] = keys_[1] = keys_[2] = keys_[3] = false;
     }
     const int crash0 = sim_->crashSounds, horn0 = sim_->hornSounds;
     sim_->update(dt, drive_input());
@@ -248,8 +254,8 @@ void App::open_violator_question(int car) {
     c.violation = 0;  // each violation can be asked once
     static const std::uint32_t correct[4] = {0, 0x532eec, 0x532f48, 0x532f64};
     static const char* fb[4] = {"", "Bu araç ışık ihlali yaptı.", "Bu araç etrafı kirletiyor.", "Bu araç yanlış park etmiş."};
-    const std::string ans[3] = {exe_->ansi_or(correct[code], fb[code]), exe_->ansi_or(0x532f08, "Bu aracın son muayene süresi geçmiş."),
-                                exe_->ansi_or(0x532f30, "Aracın farları kırık.")};
+    const std::string ans[3] = {exe_->short_or(correct[code], fb[code]), exe_->short_or(0x532f08, "Bu aracın son muayene süresi geçmiş."),
+                                exe_->short_or(0x532f30, "Aracın farları kırık.")};
     panel_ = {};
     panel_.open = true;
     panel_.kind = Panel::Violator;
@@ -274,14 +280,14 @@ void App::open_menu_question(bool esc) {
     panel_.kind = Panel::Menu;
     panel_.menuEsc = esc;
     if (esc) {
-        panel_.question = exe_->ansi_or(0x533180, "Oyundan çıkmak istediğinize emin misiniz?");
-        panel_.lines = {"", exe_->ansi_or(0x5331ac, " > Hayır, oyuna devam et."), exe_->ansi_or(0x5331c8, " > Evet, oyundan çıkmak istiyorum.")};
+        panel_.question = exe_->short_or(0x533180, "Oyundan çıkmak istediğinize emin misiniz?");
+        panel_.lines = {"", exe_->short_or(0x5331ac, " > Hayır, oyuna devam et."), exe_->short_or(0x5331c8, " > Evet, oyundan çıkmak istiyorum.")};
         panel_.tags = {0, 2, 3};
     } else {
-        panel_.question = exe_->ansi_or(0x5331f4, "Tebrikler ! Devam etmek için seçiniz...");
-        const std::string t1 = mapIndex_ < 4 ? exe_->ansi_or(0x533264, " > Bir sonraki haritaya geç.")
-                                             : exe_->ansi_or(0x53321c, ">> Sonucu TOYOTASA'ya yolla...");
-        panel_.lines = {t1, exe_->ansi_or(0x53323c, " > Bu haritaya devam et."), exe_->ansi_or(0x533258, " > Çıkış.")};
+        panel_.question = exe_->short_or(0x5331f4, "Tebrikler ! Devam etmek için seçiniz...");
+        const std::string t1 = mapIndex_ < 4 ? exe_->short_or(0x533264, " > Bir sonraki haritaya geç.")
+                                             : exe_->short_or(0x53321c, ">> Sonucu TOYOTASA'ya yolla...");
+        panel_.lines = {t1, exe_->short_or(0x53323c, " > Bu haritaya devam et."), exe_->short_or(0x533258, " > Çıkış.")};
         panel_.tags = {1, 2, 3};
     }
 }
@@ -384,6 +390,41 @@ void App::exit_to_menu() {
     menuMode_ = false;
     goto_screen(Screen::Main);
     play_music("sesler\\trafik_ses2.mp3");
+}
+
+void App::autodrive_step() {
+    const MapData& m = sim_->map();
+    Car& c = sim_->player();
+    const glm::vec3 P = c.body->position();
+    auto node = [&](int i) { const auto& n = m.nodes[static_cast<std::size_t>(i)].pos; return glm::vec3(n[0], 0, n[2]); };
+    if (autoTo_ < 0) {
+        autoFrom_ = c.from;
+        autoTo_ = c.to;
+    }
+    const glm::vec3 flatP(P.x, 0, P.z);
+    if (glm::length(flatP - node(autoTo_)) < 4.0f) {
+        std::vector<int> opts;
+        for (const auto& r : m.roads) {
+            const int o = r.a == autoTo_ ? r.b : r.b == autoTo_ ? r.a : -1;
+            if (o >= 0 && o != autoFrom_) opts.push_back(o);
+        }
+        if (opts.empty()) opts.push_back(autoFrom_);
+        autoFrom_ = autoTo_;
+        autoTo_ = opts[std::uniform_int_distribution<std::size_t>(0, opts.size() - 1)(rng_)];
+    }
+    const glm::vec3 A = node(autoFrom_), B = node(autoTo_);
+    const glm::vec3 f = glm::normalize(B - A + glm::vec3(1e-4f, 0, 0));
+    const glm::vec3 right = glm::normalize(glm::cross(f, glm::vec3(0, 1, 0)));
+    const float along = glm::dot(flatP - A, f);
+    const glm::vec3 tp = A + f * (along + 7.0f) + right * 1.5f;  // right-hand lane, 7 m look-ahead
+    const glm::vec3 fw = glm::normalize(glm::vec3(c.body->forward().x, 0, c.body->forward().z));
+    const glm::vec3 to = glm::normalize(tp - flatP);
+    const float ang = std::atan2(-glm::cross(fw, to).y, glm::dot(fw, to));  // + = target to the right
+    const float kmh = c.body->kmh();
+    keys_[3] = ang > 0.05f;
+    keys_[2] = ang < -0.05f;
+    keys_[0] = kmh < (std::abs(ang) > 0.4f ? 15.0f : 30.0f);
+    keys_[1] = false;
 }
 
 void App::signclick(bool correct) {

@@ -183,6 +183,10 @@ private:
     double pendingAt_ = 0;
     double gameTime_ = 0;  // wall clock while in Screen::Game
     void signclick(bool correct);
+    // Test autopilot: presses arrow keys to follow the road graph (keyboard input only, no physics shortcuts).
+    double autodriveUntil_ = 0;
+    int autoFrom_ = -1, autoTo_ = -1;
+    void autodrive_step();
     bool resumeAfterSpeech_ = false, menuAfterSpeech_ = false;
     std::unique_ptr<Audio::Voice> engine_, radio_;
     int radioTrack_ = 0;

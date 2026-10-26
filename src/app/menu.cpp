@@ -200,8 +200,8 @@ void App::quiz_click(int line) {
         log_info("licence quiz passed ({} correct)", quiz_->correct());
     } else if (quiz_->state() == LicenceQuiz::State::Failed) {
         profile_->set_score(0);
-        message_box(exe_->ansi_or(0x517380, "Oyuna baslamak icin gerekli sürücü belgesini alamadiniz. Lutfen tekrar deneyin."),
-                    exe_->ansi_or(0x517378, "Uyari"));
+        message_box(exe_->pchar_or(0x517380, "Oyuna baslamak icin gerekli sürücü belgesini alamadiniz. Lutfen tekrar deneyin."),
+                    exe_->pchar_or(0x517378, "Uyari"));
     }
 }
 
@@ -209,7 +209,7 @@ void App::try_start_map(int map) {
     if (!licenceThisRun_) {
         message_box(exe_->ansi_or(0x517eac, "Oyunu oynayabilmek için önce \"Sürücü Belgesi\" düğmesine basarak 10 sorudan ") +
                         std::to_string(needCorrect_) + exe_->ansi_or(0x517f00, " tanesini doğru yanıtlamalısın."),
-                    exe_->ansi_or(0x517f20, "Uyarı"));
+                    exe_->pchar_or(0x517f20, "Uyarı"));
         return;
     }
     music_.reset();
