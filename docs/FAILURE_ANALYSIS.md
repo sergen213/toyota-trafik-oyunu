@@ -69,4 +69,24 @@ scripts/tto_ctl.sh snap shot.png
 ## Next steps
 
 - Test on real Windows 10/11 when available (record the exact dialog and whether `iv5setup.exe` fixes it).
-- Optional: a documented, reversible "repair kit" for Wine users (transcode script + launch wrapper).
+- ~~Optional repair kit~~ done: `scripts/wine_recover.sh` (see below).
+
+## Scripted recovery (verified 2026-10-26)
+
+```sh
+scripts/wine_recover.sh setup "<installed Toyota Trafik Oyunu v2 folder>" work/recover   # copy + Cinepak + new prefix
+Xvfb :78 -screen 0 1024x768x24 &          # or run on a normal desktop
+DISPLAY=:78 scripts/wine_recover.sh run work/recover
+```
+
+`setup` copies the game folder, re-encodes only the copy's `Video/cancan.avi` (IV41 → Cinepak, PCM audio),
+re-checks the source file's SHA-256, and creates a fresh prefix with `winemenubuilder` disabled (no desktop-file
+side effects). `run` starts the game with `LC_ALL=tr_TR.UTF-8` inside a 1024×768 Wine virtual desktop.
+No `tr_TR` glibc locale is installed on the test machine; Wine still selects code page 1254 from the name.
+
+Verified run, with no error dialogs and no MCI/codec errors in the log (screenshots in private
+`work/runs/recover_verified/`):
+start screen → help → new driver form → main menu → licence quiz, answered with `scripts/quiz_bot.py` (8/8 needed, wheels shown)
+→ `cancan.avi` intro plays → map selection → Eğitim Sahası loads → driving with ↑ (HUD Süre/Puan/km/h updates)
+→ after the 240 s time limit, the "PERFORMANSIN" report lists all counters and "Devam Etmek İçin [ENTER] Tuşuna Basın…".
+F4 does nothing at 0 points, as documented in `re/RULES.md` §3.2 (it needs score ≥ required).
