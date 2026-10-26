@@ -1,5 +1,6 @@
 #include "render/text.hpp"
 
+#include <cstring>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <fontconfig/fontconfig.h>
 

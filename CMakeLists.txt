@@ -36,6 +36,8 @@ add_library(tto_core STATIC
   src/data/mapdata.cpp
   src/formats/tds.cpp
   src/formats/smd.cpp
+  src/formats/dfm.cpp
+  src/data/validate.cpp
   src/game/vehicle.cpp
   src/game/traffic.cpp
   src/game/rules.cpp
@@ -76,6 +78,7 @@ if(TTO_BUILD_TESTS)
     tests/test_rules.cpp
     tests/test_vehicle.cpp
     tests/test_realdata.cpp
+    tests/test_dfm.cpp
   )
   target_link_libraries(tto_tests PRIVATE tto_core GTest::gtest_main)
   include(GoogleTest)
