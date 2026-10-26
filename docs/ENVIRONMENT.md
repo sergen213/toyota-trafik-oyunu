@@ -21,6 +21,12 @@ writing. Because the task requires an *officially finalized* standard, the proje
 (`CMAKE_CXX_STANDARD 23`, no extensions). GCC 16 and Clang 23 both implement the C++23 features used
 (`std::format`, `std::span`, `std::from_chars` for floats, `std::erase`). Revisit when ISO publishes 14882:2026.
 
+Re-verified 2026-10-26: ISO still lists *ISO/IEC DIS 14882* in the enquiry phase, and WG21 paper P4388R0 ("Ship C++26",
+October 2026 mailing) proposes submitting it for publication, so it is not yet published. Both compilers report
+`__cplusplus 202400L` for `-std=c++26` (partial/draft). `scripts/check_toolchain.sh` compiles and runs
+`scripts/cxx23_probe.cpp` (`std::expected`, `std::print`, `std::ranges::to`, float `from_chars`) with both GCC 16 and
+Clang 23 in `-std=c++23` mode: both pass.
+
 ## Pinned dependency policy
 
 Only distribution packages are used; no vendored third-party code except the header-only stb from the
