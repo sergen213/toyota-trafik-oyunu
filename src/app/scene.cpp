@@ -1,6 +1,7 @@
 #include "app/scene.hpp"
 
 #include <cmath>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/norm.hpp>
 
@@ -591,13 +592,22 @@ void Scene::draw(Sim& sim, int w, int h, std::optional<int> arrowSign, bool talk
             bo.tint = c.color;
             r_.draw(cm.body, B, ids(bo));
         }
-        // Wheels: Teker<n>.3ds on every ODE wheel body, scale 0.025 * Radius, mirrored on the left.
-        if (const GpuMesh& wm = wheels_[static_cast<std::size_t>(cm.wheel)]; wm.handle && c.type != 16)
+        // Wheels: Teker<n>.3ds on every ODE wheel body. The mesh is a pancake (rim plate on one axle end), so the
+        // far-side copy must be reflected in the *car* frame: M*L*M with M = diag(side,1,1). Mirroring post-multiplied
+        // by the wheel rotation reflects the spin itself, which reverses it and swings the rim plate through the
+        // ground as the wheel turns. Conjugation keeps det > 0, mirrors the centre across the car plane and flips the
+        // spin sign, so both sides roll forward with the rim facing out.
+        if (const GpuMesh& wm = wheels_[static_cast<std::size_t>(cm.wheel)]; wm.handle && c.type != 16) {
+            const glm::mat4 invT = glm::affineInverse(T);
             for (int i = 0; i < 4; ++i) {
                 const glm::mat4 W = c.body->wheel_transform(i);
                 const float side = glm::dot(glm::vec3(W[3]) - c.body->position(), glm::vec3(T[0])) < 0 ? -1.0f : 1.0f;
-                r_.draw(wm, W * glm::scale(glm::mat4(1), {side * cm.wheelScale / 0.01f, cm.wheelScale / 0.01f, cm.wheelScale / 0.01f}), ids({}));
+                glm::mat4 M(1.0f);
+                M[0] *= side;
+                const glm::mat4 L = invT * W;
+                r_.draw(wm, T * (M * L * M) * glm::scale(glm::mat4(1), glm::vec3(cm.wheelScale / 0.01f)), ids({}));
             }
+        }
         auto lampAt = [&](const std::optional<GpuMesh>& m, glm::vec3 off) {
             if (!m) return;
             DrawOpts o;

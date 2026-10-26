@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Car wheels on the far side of each car: the rim face now points outward and the tyres roll in the right direction.
+  The mirror was applied inside the rotating wheel frame, so it swung the rim plate through the ground as the wheel
+  turned and reversed the visible spin; it is now reflected across the car body (`M*L*M`).
+
 ## 0.2.0 — 2026-10-26
 
 - Map actors: train and level crossings (Şehir), school bus with −7 overtaking rule, ambulance/police with sirens,
