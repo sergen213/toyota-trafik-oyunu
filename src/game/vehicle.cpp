@@ -269,6 +269,11 @@ glm::mat4 OdeCar::wheel_transform(int i) const {
     return m;
 }
 
+glm::vec2 OdeCar::wheel_angles(int i) const {
+    dJointID j = joints_[static_cast<std::size_t>(i)];
+    return {static_cast<float>(dJointGetHinge2Angle1(j)), static_cast<float>(dJointGetHinge2Angle2(j))};
+}
+
 void OdeCar::set_enabled(bool on) {
     for (dBodyID b : {chassis_, wheels_[0], wheels_[1], wheels_[2], wheels_[3]}) on ? dBodyEnable(b) : dBodyDisable(b);
 }

@@ -85,6 +85,7 @@ public:
     glm::vec3 velocity() const;
     glm::mat4 transform() const;
     glm::mat4 wheel_transform(int i) const;
+    glm::vec2 wheel_angles(int i) const;  // hinge2 (yaw, spin) in chassis frame
     void set_enabled(bool on);
     bool owns(dBodyID b) const;
     const CarParams& params() const { return p_; }
