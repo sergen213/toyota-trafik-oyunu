@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 — 2026-10-26
 
 - Car wheels fixed: the right-side tyres were being drawn on top of the left ones (rim facing inboard), leaving the
   right side bare. The far-side mesh is now mirrored across its own centre plane, so each tyre sits under its own
   arch with the rim plate pointing out; steering toe is preserved and mirrored meshes keep outward-facing normals.
+- Mirrored wheel animation: the right-side tyres were frozen (the mirroring kept only the steering angle). The full
+  per-wheel rotation — steering and rolling spin together — is now mirrored about the wheel centre plane, so both
+  sides roll forward and the rim dish stays outboard on every wheel.
 
 ## 0.2.0 — 2026-10-26
 
