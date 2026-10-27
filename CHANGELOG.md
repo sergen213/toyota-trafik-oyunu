@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.4 — 2026-10-26
+
+- Right-side tyres spin again with the rim dish outboard. Two compounding bugs: the far-side mirror matrix negated a whole GLM column
+  (x, y, z and w), shearing the mesh and warping perspective so the right wheels drew as a dark, frozen blob; and the far-side rotation
+  was conjugated by that mirror — a proper transform that flips the dish back inboard. The mirror is now diag(−1,1,1) via `M[0][0]`
+  and the far side composes as the true mirror twin of the verified near-side look (`P*F*R*M`): rims out on both flanks, steering yaw
+  mirrored, tyres rolling forward.
+- Rear-left tyre wiggle: wheel rotation is rebuilt from the hinge2 steering/spin angles about the chassis axes; the raw wheel-body
+  quaternion carries free-axis wobble (suspension and contact impulses) that visibly rocked the pancake rim.
+
 ## 0.2.3 — 2026-10-26
 
 - Car wheels fixed: the right-side tyres were being drawn on top of the left ones (rim facing inboard), leaving the
