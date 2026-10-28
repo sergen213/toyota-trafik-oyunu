@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.5 — 2026-10-28
+
+- Launcher: the AppImage now opens a Qt 6 launcher (`toyota-trafik-launcher`) instead of starting the game straight
+  away. It selects the installed game folder (checked with `--check`) or imports the setup CD / `.rar`, and sets
+  window/fullscreen, window size, renderer, ray tracing, FSR 3.1 upscaling, frame generation and mute before *Play*.
+  Settings persist in `~/.config/toyota-trafik/launcher.conf`. With arguments the AppImage still runs the game directly.
+- Animated sea (an addition, not original behaviour): `deniz.jpg` surfaces get travelling waves, Fresnel sky
+  reflection, a sun glint and crest highlights on both renderers; with Vulkan ray tracing on, scenery in the mirrored
+  direction darkens the reflection.
+
 ## 0.2.4 — 2026-10-26
 
 - Right-side tyres spin again with the rim dish outboard. Two compounding bugs: the far-side mirror matrix negated a whole GLM column

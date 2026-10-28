@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(ToyotaTrafikOyunuNative VERSION 0.2.4 LANGUAGES C CXX)
+project(ToyotaTrafikOyunuNative VERSION 0.2.5 LANGUAGES C CXX)
 
 # C++26 is technically complete in WG21 but ISO 14882:2026 is still a DIS
 # (see docs/ENVIRONMENT.md), so the project uses C++23.
@@ -139,6 +139,19 @@ install(TARGETS toyota-trafik RUNTIME DESTINATION bin)
 # The binary finds maps.json in <bindir>/data or <prefix>/share/toyota-trafik.
 configure_file(data/maps.json ${CMAKE_BINARY_DIR}/data/maps.json COPYONLY)
 install(FILES data/maps.json DESTINATION share/toyota-trafik)
+endif()
+
+# Qt 6 launcher (Linux): game folder / import, display and graphics options, then starts toyota-trafik.
+if(TTO_BUILD_GAME AND NOT WIN32)
+  find_package(Qt6 6.5 COMPONENTS Widgets)
+  if(Qt6_FOUND)
+    qt_standard_project_setup()
+    qt_add_executable(toyota-trafik-launcher src/launcher/main.cpp)
+    target_link_libraries(toyota-trafik-launcher PRIVATE Qt6::Widgets)
+    install(TARGETS toyota-trafik-launcher RUNTIME DESTINATION bin)
+  else()
+    message(STATUS "Qt 6 Widgets not found: toyota-trafik-launcher is not built")
+  endif()
 endif()
 
 if(TTO_BUILD_TESTS)

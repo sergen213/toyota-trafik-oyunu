@@ -5,6 +5,7 @@
 ```sh
 sudo pacman -S --needed base-devel cmake ninja git sdl3 sdl3_ttf glew glm mpg123 fontconfig stb nlohmann-json gtest noto-fonts \
     vulkan-headers vulkan-icd-loader shaderc ffmpeg python libarchive
+# optional: qt6-base (builds toyota-trafik-launcher; skipped when Qt 6 is missing)
 # optional: vulkan-validation-layers (VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation)
 ```
 
@@ -48,8 +49,9 @@ scripts/package_release.sh            # version from CMakeLists.txt; output in d
 ```
 
 - **AppImage**: `linuxdeploy.appimage` collects the libraries; the untouched Arch copies are then put back (its
-  patchelf corrupts current Arch libraries) and `AppRun` sets `LD_LIBRARY_PATH`; `appimagetool` packs it. The
-  Vulkan loader, glibc and GPU drivers come from the host.
+  patchelf corrupts current Arch libraries) and `AppRun` sets `LD_LIBRARY_PATH` and `QT_PLUGIN_PATH`; `appimagetool`
+  packs it. The Vulkan loader, glibc and GPU drivers come from the host. `AppRun` starts the Qt launcher without
+  arguments and the game with arguments (or `TTO_APPIMAGE_ENTRY=toyota-trafik`).
 - **Windows**: MinGW-w64 cross build (`cmake/mingw-w64.cmake`) against an MSYS2 **ucrt64** prefix (same CRT as Arch's
   mingw-w64 toolchain). Create the prefix without root:
 

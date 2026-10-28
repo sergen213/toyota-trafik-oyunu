@@ -23,7 +23,19 @@ DESTDIR=$ROOT/build-appimage/AppDir cmake --install build-appimage
 install -Dm644 README.md docs/LEGAL.md "${LICENSES[@]}" -t build-appimage/AppDir/usr/share/doc/toyota-trafik/
 rm -f "$DIST"/ToyotaTrafik-*-x86_64.AppImage
 cd build-appimage
-"$LINUXDEPLOY" --appdir AppDir --exclude-library "libvulkan.so*" -e AppDir/usr/bin/toyota-trafik -d "$ROOT/data/toyota-trafik.desktop" -i "$ROOT/data/toyota-trafik.svg"
+# Qt platform/theme plugins for the launcher, in Arch's own layout (usr/lib/qt6/plugins) so linuxdeploy bundles their
+# dependencies; host GL/Wayland/X client libraries stay excluded like the game's.
+QTP=/usr/lib/qt6/plugins
+for f in platforms/libqwayland.so platforms/libqxcb.so platforms/libqoffscreen.so \
+         wayland-shell-integration/libxdg-shell.so wayland-decoration-client/libbradient.so \
+         wayland-graphics-integration-client/libqt-plugin-wayland-egl.so xcbglintegrations/libqxcb-glx-integration.so \
+         xcbglintegrations/libqxcb-egl-integration.so imageformats/libqsvg.so iconengines/libqsvgicon.so \
+         platforminputcontexts/libcomposeplatforminputcontextplugin.so platformthemes/libqxdgdesktopportal.so; do
+  install -Dm755 "$QTP/$f" "AppDir/usr/lib/qt6/plugins/$f"
+done
+"$LINUXDEPLOY" --appdir AppDir --exclude-library "libvulkan.so*" -e AppDir/usr/bin/toyota-trafik -e AppDir/usr/bin/toyota-trafik-launcher \
+  $(find AppDir/usr/lib/qt6/plugins -name '*.so' -printf '--library %p ') \
+  -d "$ROOT/data/toyota-trafik.desktop" -i "$ROOT/data/toyota-trafik.svg"
 # Licence texts of every Arch package that contributed a bundled library.
 for so in AppDir/usr/lib/*.so*; do pacman -Qqo "/usr/lib/$(basename "$so")" 2>/dev/null || true; done | sort -u >AppDir/usr/share/doc/toyota-trafik/bundled-packages.txt
 while read -r p; do
@@ -32,12 +44,18 @@ done <AppDir/usr/share/doc/toyota-trafik/bundled-packages.txt
 # linuxdeploy's bundled patchelf corrupts current Arch libraries (crash in ld.so): restore the untouched copies and
 # resolve bundled libraries through LD_LIBRARY_PATH instead of rewritten RPATHs.
 for so in AppDir/usr/lib/*.so*; do cp -f "/usr/lib/$(basename "$so")" "$so"; done
+(cd AppDir/usr/lib/qt6/plugins && for f in */*.so; do cp -f "$QTP/$f" "$f"; done)
 rm -f AppDir/AppRun
+# No arguments: the launcher. Arguments (scripts, --game ...) or TTO_APPIMAGE_ENTRY=toyota-trafik: the game itself.
 cat >AppDir/AppRun <<'EOF'
 #!/bin/sh
 HERE=$(dirname "$(readlink -f "$0")")
 export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-exec "$HERE/usr/bin/toyota-trafik" "$@"
+export QT_PLUGIN_PATH="$HERE/usr/lib/qt6/plugins"
+entry=${TTO_APPIMAGE_ENTRY:-}
+[ -z "$entry" ] && { [ $# -gt 0 ] && entry=toyota-trafik || entry=toyota-trafik-launcher; }
+case $entry in toyota-trafik|toyota-trafik-launcher) ;; *) echo "AppRun: invalid TTO_APPIMAGE_ENTRY" >&2; exit 2 ;; esac
+exec "$HERE/usr/bin/$entry" "$@"
 EOF
 chmod +x AppDir/AppRun
 ARCH=x86_64 VERSION=$VER appimagetool -n AppDir "$DIST/ToyotaTrafik-$VER-x86_64.AppImage"

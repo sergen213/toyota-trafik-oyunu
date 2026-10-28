@@ -36,7 +36,10 @@ This repository contains:
 Releases (<https://github.com/sergen213/toyota-trafik-oyunu/releases>) contain a Linux AppImage, a Windows x64 installer
 (`…-Setup.exe`, per-user, no administrator rights, Start menu/desktop shortcuts, uninstaller) and the same Windows files as a
 portable zip.
-Neither contains any game file: on first start the program finds your copy, or asks for one of
+Neither contains any game file. Starting the AppImage opens the **launcher**: choose your copy of the game, set the
+display (window/fullscreen, size) and graphics (renderer, ray tracing, FSR upscaling, frame generation), then *Play*.
+Started with arguments (or `TTO_APPIMAGE_ENTRY=toyota-trafik`), the AppImage runs the game directly. The game itself
+finds your copy on first start, or asks for one of
 
 - **Installed game folder**: the folder containing `TrafikOyunu.exe` (used in place, never written), or
 - **Setup folder (CD)**: the CD or a copy of it (`Kurulum1`/`Kurulum2`), or
