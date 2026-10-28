@@ -1271,7 +1271,7 @@ std::uint32_t VkRenderer::camera_index() {
     b.amb = glm::vec4(light_.ambient, 1);
     b.dif = glm::vec4(light_.diffuse, 1);
     b.fogColor = glm::vec4(fog_.color, fog_.enabled ? 1.0f : 0.0f);
-    b.fogRange = glm::vec4(fog_.start, fog_.end, 0, 0);
+    b.fogRange = glm::vec4(fog_.start, fog_.end, time_, 0);  // z: water animation clock
     if (camBlocks_.empty() || std::memcmp(&camBlocks_.back(), &b, sizeof b) != 0) camBlocks_.push_back(b);
     return static_cast<std::uint32_t>(camBlocks_.size() - 1);
 }
@@ -1364,7 +1364,7 @@ void VkRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& 
         const glm::vec3 col = (d.tintable || o.forceTint) && o.tint ? *o.tint : d.color;
         c.push.color = glm::vec4(col, a);
         c.push.uvx = o.uv;
-        c.push.params = {d.tex ? d.tex->id : white_.id, (o.unlit ? 1u : 0u) | (rtOn_ ? 4u : 0u), cam, 0};
+        c.push.params = {d.tex ? d.tex->id : white_.id, (o.unlit ? 1u : 0u) | (rtOn_ ? 4u : 0u) | (d.water && !o.unlit ? 8u : 0u), cam, 0};
         cmds_.push_back(c);
     }
     if (rtOn_ && o.castShadow && !o.unlit && it->second.blas.addr) instances_.push_back({model, it->second.blas.addr});

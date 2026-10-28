@@ -57,6 +57,7 @@ GpuMesh Renderer::upload_frames(const std::vector<Mesh>& frames, const glm::mat4
                     d.color = {mat.diffuse[0], mat.diffuse[1], mat.diffuse[2]};
                     d.alpha = 1.0f - mat.transparency;
                     d.texName = lower(mat.texture);
+                    d.water = d.texName == "deniz.jpg";
                     if (d.texName == "null.bmp") {
                         d.tintable = true;
                     } else if (!mat.texture.empty() && f == 0) {

@@ -487,6 +487,7 @@ void Scene::draw(Sim& sim, int w, int h, std::optional<int> arrowSign, bool talk
     l.ambient = glm::vec3(0.55f);
     l.diffuse = glm::vec3(0.55f);
     r_.set_light(l);
+    r_.set_time(static_cast<float>(std::fmod(sim.wall(), 3600.0)));  // water animation; wrapped to keep float precision
     for (const auto& [m, t] : scenery_) r_.draw(m, t);
     const double now = sim.wall();
     // Traffic lights: three lamba.3ds per head (0x53b3e0), lit = emissive colour.

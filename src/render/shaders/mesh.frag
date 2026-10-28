@@ -5,6 +5,7 @@
 layout(set = 0, binding = 2) uniform accelerationStructureEXT tlas;
 #endif
 #include "common.glsl"
+#include "water.glsl"
 layout(set = 0, binding = 0) uniform sampler2D tex[];
 layout(location = 0) in vec3 vNrm;
 layout(location = 1) in vec2 vUv;
@@ -22,7 +23,28 @@ void main() {
     if (t.a < 0.5) discard;
     vec3 col = t.rgb * pc.color.rgb;
     uint flags = pc.params.y;
-    if ((flags & 1u) == 0u) {
+    if ((flags & 8u) != 0u) {
+        // Sea surface; Cam.fogRange.z carries the animation clock.
+        float tm = c.fogRange.z;
+        vec3 b0 = texture(tex[nonuniformEXT(pc.params.x)], water_uv(vUv, tm, 0)).rgb;
+        vec3 b1 = texture(tex[nonuniformEXT(pc.params.x)], water_uv(vUv, tm, 1)).rgb;
+        vec3 eye = -transpose(mat3(c.view)) * c.view[3].xyz;
+        vec3 L = -normalize(c.lightDir.xyz);
+        vec3 horizon = c.fogColor.w > 0.5 ? c.fogColor.rgb : vec3(0.62, 0.75, 0.9);
+        float occl = 1.0;
+#ifdef RT
+        if ((flags & 4u) != 0u) {
+            // Ray-traced reflection occlusion: scenery in the mirrored direction darkens the reflection.
+            vec3 V = normalize(eye - vWorld);
+            rayQueryEXT q;
+            rayQueryInitializeEXT(q, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, 0xFF,
+                                  vWorld + vec3(0, 0.05, 0), 0.02, reflect(-V, vec3(0, 1, 0)), 250.0);
+            while (rayQueryProceedEXT(q)) {}
+            if (rayQueryGetIntersectionTypeEXT(q, true) != gl_RayQueryCommittedIntersectionNoneEXT) occl = 0.0;
+        }
+#endif
+        col = water_shade(b0, b1, vWorld, eye, L, c.amb.rgb, c.dif.rgb, horizon, tm, vDist, occl);
+    } else if ((flags & 1u) == 0u) {
         vec3 n = normalize(vNrm);
         vec3 L = -normalize(c.lightDir.xyz);
         float d = abs(dot(n, L));  // GLScene materials light both faces

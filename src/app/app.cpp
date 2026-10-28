@@ -502,6 +502,8 @@ void App::run_script(double) {
                     view_shot(x.pos + x.facing * 9.0f + glm::vec3(-3, 3, 0), x.pos, arg(0));
                     log_info("crossing closed={} boom={:.0f} train running={} z={:.0f}", x.closed, x.boom, sim_->train().running, sim_->train().z);
                 }
+            } else if (s.cmd == "view") {  // test: "view ex ey ez tx ty tz <name>" captures the scene from a world-space eye
+                view_shot({std::stof(arg(0)), std::stof(arg(1)), std::stof(arg(2))}, {std::stof(arg(3)), std::stof(arg(4)), std::stof(arg(5))}, arg(6));
             } else if (s.cmd == "pldir") {  // test: point the music-list editor at a folder of the game install
                 if (auto d = fs_->find(arg(0))) {
                     pl_.dir = *d;

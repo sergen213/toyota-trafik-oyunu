@@ -6,6 +6,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "core/log.hpp"
+#include "water_glsl.h"
 
 namespace tto {
 namespace {
@@ -17,25 +18,39 @@ layout(location=2) in vec2 aUv;
 uniform mat4 uModel, uView, uProj;
 uniform mat3 uNrm;
 uniform vec4 uUvX;
-out vec3 vNrm; out vec2 vUv; out float vDist;
+out vec3 vNrm; out vec2 vUv; out float vDist; out vec3 vWorld;
 void main() {
   vec4 w = uModel * vec4(aPos, 1.0);
   vec4 e = uView * w;
   vDist = length(e.xyz);
+  vWorld = w.xyz;
   vNrm = normalize(uNrm * aNrm);
   vUv = uUvX.xy + aUv * uUvX.zw;
   gl_Position = uProj * e;
 })";
 
-const char* kFs3d = R"(#version 330 core
-in vec3 vNrm; in vec2 vUv; in float vDist;
+// Fragment shader = head + shared water function (water.glsl) + main.
+const char* kFs3dHead = R"(#version 330 core
+in vec3 vNrm; in vec2 vUv; in float vDist; in vec3 vWorld;
 uniform sampler2D uTex;
 uniform vec4 uColor;
 uniform vec3 uLightDir, uAmb, uDif;
 uniform int uUnlit;
 uniform int uFog; uniform vec3 uFogColor; uniform vec2 uFogRange;
+uniform int uWater; uniform float uTime; uniform mat4 uView;
 out vec4 oColor;
+)";
+const char* kFs3dMain = R"(
 void main() {
+  if (uWater != 0) {
+    vec3 b0 = texture(uTex, water_uv(vUv, uTime, 0)).rgb, b1 = texture(uTex, water_uv(vUv, uTime, 1)).rgb;
+    vec3 eye = -transpose(mat3(uView)) * uView[3].xyz;
+    vec3 horizon = uFog != 0 ? uFogColor : vec3(0.62, 0.75, 0.9);
+    vec3 c = water_shade(b0, b1, vWorld, eye, -uLightDir, uAmb, uDif, horizon, uTime, vDist, 1.0);
+    if (uFog != 0) c = mix(uFogColor, c, clamp((uFogRange.y - vDist) / (uFogRange.y - uFogRange.x), 0.0, 1.0));
+    oColor = vec4(c, uColor.a);
+    return;
+  }
   vec4 t = texture(uTex, vUv);
   if (t.a < 0.5) discard;
   vec3 c = t.rgb * uColor.rgb;
@@ -160,7 +175,7 @@ bool GlRenderer::init() {
         return false;
     }
     glGetError();  // GLEW on core profiles leaves GL_INVALID_ENUM
-    prog3d_ = link(kVs3d, kFs3d);
+    prog3d_ = link(kVs3d, (std::string(kFs3dHead) + kWaterGlsl + kFs3dMain).c_str());
     prog2d_ = link(kVs2d, kFs2d);
     if (!prog3d_ || !prog2d_) return false;
     const float q[] = {0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1};
@@ -306,6 +321,7 @@ void GlRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& 
     glUniform2f(U(prog3d_, "uFogRange"), fog_.start, fog_.end);
     glUniform4fv(U(prog3d_, "uUvX"), 1, glm::value_ptr(o.uv));
     glUniform1i(U(prog3d_, "uTex"), 0);
+    glUniform1f(U(prog3d_, "uTime"), time_);
     glActiveTexture(GL_TEXTURE0);
     glBindVertexArray(it->second.vao);
     const GLint base = static_cast<GLint>(m.frameVerts) * std::clamp(o.frame, 0, m.frames - 1);
@@ -319,6 +335,7 @@ void GlRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& 
         glBindTexture(GL_TEXTURE_2D, d.tex ? d.tex->id : white_.id);
         const glm::vec3 c = (d.tintable || o.forceTint) && o.tint ? *o.tint : d.color;
         glUniform4f(U(prog3d_, "uColor"), c.r, c.g, c.b, a);
+        glUniform1i(U(prog3d_, "uWater"), d.water && !o.unlit ? 1 : 0);
         glDrawArrays(GL_TRIANGLES, base + static_cast<GLint>(d.first), static_cast<GLsizei>(d.count));
         if (a < 0.999f) {
             glDisable(GL_BLEND);
@@ -338,6 +355,7 @@ void GlRenderer::draw_sky(const std::array<const Texture*, 6>& faces) {
     glUniformMatrix3fv(U(prog3d_, "uNrm"), 1, GL_FALSE, glm::value_ptr(glm::mat3(1)));
     glUniform1i(U(prog3d_, "uUnlit"), 1);
     glUniform1i(U(prog3d_, "uFog"), 0);
+    glUniform1i(U(prog3d_, "uWater"), 0);
     glUniform4f(U(prog3d_, "uColor"), 1, 1, 1, 1);
     glUniform4f(U(prog3d_, "uUvX"), 0, 0, 1, 1);
     glDepthMask(GL_FALSE);

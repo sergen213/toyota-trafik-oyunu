@@ -91,10 +91,14 @@ foreach(sh mesh.vert mesh.frag quad.vert quad.frag mesh_rt.frag mesh_m.frag mesh
   add_custom_command(OUTPUT ${TTO_SPV_DIR}/${sh}.inc
     COMMAND ${CMAKE_COMMAND} -E make_directory ${TTO_SPV_DIR}
     COMMAND ${GLSLC} --target-env=vulkan1.3 -O ${defs} -mfmt=num ${TTO_SHADER_DIR}/${src} -o ${TTO_SPV_DIR}/${sh}.inc
-    DEPENDS ${TTO_SHADER_DIR}/${src} ${TTO_SHADER_DIR}/common.glsl VERBATIM)
+    DEPENDS ${TTO_SHADER_DIR}/${src} ${TTO_SHADER_DIR}/common.glsl ${TTO_SHADER_DIR}/water.glsl VERBATIM)
   list(APPEND TTO_SPV ${TTO_SPV_DIR}/${sh}.inc)
 endforeach()
 add_custom_target(tto_shaders DEPENDS ${TTO_SPV})
+# The OpenGL backend embeds the same water function as a raw string (generated/water_glsl.h).
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${TTO_SHADER_DIR}/water.glsl)
+file(READ ${TTO_SHADER_DIR}/water.glsl TTO_WATER_GLSL)
+file(WRITE ${CMAKE_BINARY_DIR}/generated/water_glsl.h "#pragma once\ninline constexpr const char* kWaterGlsl = R\"glsl(${TTO_WATER_GLSL})glsl\";\n")
 # AMD FidelityFX SDK v1.1.4 subset: FSR 3.1.4 upscaler + frame interpolation + optical flow, Vulkan backend (MIT,
 # third_party/FidelityFX-SDK/PROVENANCE.txt). tools/ffx_fsr3_blobs.py compiles the passes with glslc (no FidelityFX_SC).
 find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
@@ -122,7 +126,7 @@ target_link_libraries(tto_fsr3 PUBLIC Vulkan::Vulkan)
 target_link_libraries(toyota-trafik PRIVATE tto_fsr3)
 install(FILES ${TTO_FFX}/LICENSE.txt DESTINATION share/doc/toyota-trafik/third_party RENAME FidelityFX-SDK-LICENSE.txt)
 add_dependencies(toyota-trafik tto_shaders)
-target_include_directories(toyota-trafik PRIVATE ${STB_INCLUDE_DIR} ${TTO_SPV_DIR})
+target_include_directories(toyota-trafik PRIVATE ${STB_INCLUDE_DIR} ${TTO_SPV_DIR} ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(toyota-trafik PRIVATE tto_core SDL3::SDL3 SDL3_ttf::SDL3_ttf
   OpenGL::GL GLEW::GLEW Vulkan::Vulkan PkgConfig::MPG123 PkgConfig::FONTCONFIG PkgConfig::FFMPEG)
 if(WIN32)
