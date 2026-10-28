@@ -43,7 +43,10 @@ while read -r p; do
 done <AppDir/usr/share/doc/toyota-trafik/bundled-packages.txt
 # linuxdeploy's bundled patchelf corrupts current Arch libraries (crash in ld.so): restore the untouched copies and
 # resolve bundled libraries through LD_LIBRARY_PATH instead of rewritten RPATHs.
-for so in AppDir/usr/lib/*.so*; do cp -f "/usr/lib/$(basename "$so")" "$so"; done
+# Plugin copies linuxdeploy also placed in usr/lib (no /usr/lib original) are dropped; they load from qt6/plugins.
+for so in AppDir/usr/lib/*.so*; do
+  if [[ -f /usr/lib/$(basename "$so") ]]; then cp -f "/usr/lib/$(basename "$so")" "$so"; else rm -f "$so"; fi
+done
 (cd AppDir/usr/lib/qt6/plugins && for f in */*.so; do cp -f "$QTP/$f" "$f"; done)
 rm -f AppDir/AppRun
 # No arguments: the launcher. Arguments (scripts, --game ...) or TTO_APPIMAGE_ENTRY=toyota-trafik: the game itself.
