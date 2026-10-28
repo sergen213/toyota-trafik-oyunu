@@ -360,6 +360,14 @@ SDL_Keycode key_by_name(const std::string& n) {
 }  // namespace
 
 void App::run_script(double) {
+    // Test views ("peds shot", "cars shot", "crossing"): the script runs before frame(), so open the
+    // window frame first (as "shot" does), then draw the scene again from the test camera and capture it.
+    auto view_shot = [&](glm::vec3 eye, glm::vec3 at, const std::string& name) {
+        frame(0);
+        scene_->look_at(eye, at);
+        scene_->draw(*sim_, vw_, vh_, std::nullopt);
+        screenshot(name);
+    };
     auto cond = [&](const std::string& c) -> bool {
         static const char* names[] = {"Title", "Help", "DriverList", "NewDriver", "Main", "MapSelect", "Loading", "Game", "Playlist"};
         if (c.starts_with("screen=")) return c.substr(7) == names[static_cast<int>(screen_)];
@@ -466,11 +474,8 @@ void App::run_script(double) {
                 log_info("pedestrians active {} nearest {:.1f} m", n, best);
                 if (arg(0) == "shot")
                     for (const auto& p : sim_->pedestrians())
-                        if (p.active && glm::length(p.pos - sim_->player().body->position()) <= best + 0.01f) {
-                            scene_->look_at(p.pos - p.dir * 4.0f + glm::vec3(1.5f, 1.8f, 0), p.pos + glm::vec3(0, 0.9f, 0));
-                            scene_->draw(*sim_, vw_, vh_, std::nullopt);  // draw with this view, then capture
-                            screenshot(arg(1));
-                        }
+                        if (p.active && glm::length(p.pos - sim_->player().body->position()) <= best + 0.01f)
+                            view_shot(p.pos - p.dir * 4.0f + glm::vec3(1.5f, 1.8f, 0), p.pos + glm::vec3(0, 0.9f, 0), arg(1));
             } else if (s.cmd == "cars") {  // test: log active AI cars; "cars shot <name>" views the nearest from above
                 std::string list;
                 int near = -1;
@@ -489,16 +494,12 @@ void App::run_script(double) {
                     const Car& c = sim_->cars()[static_cast<std::size_t>(near)];
                     const glm::vec3 cp = c.body->position();
                     const glm::mat4 CT = c.body->transform();
-                    scene_->look_at(glm::vec3(CT * glm::vec4(arg(3).empty() ? 2.5f : std::stof(arg(3)) * 2.5f, 3.0f, -7.0f, 1)), cp);
-                    scene_->draw(*sim_, vw_, vh_, std::nullopt);
-                    screenshot(arg(1));
+                    view_shot(glm::vec3(CT * glm::vec4(arg(3).empty() ? 2.5f : std::stof(arg(3)) * 2.5f, 3.0f, -7.0f, 1)), cp, arg(1));
                 }
             } else if (s.cmd == "crossing") {  // test: view the first level crossing and the train
                 if (!sim_->crossings().empty()) {
                     const auto& x = sim_->crossings()[0];
-                    scene_->look_at(x.pos + x.facing * 9.0f + glm::vec3(-3, 3, 0), x.pos);
-                    scene_->draw(*sim_, vw_, vh_, std::nullopt);
-                    screenshot(arg(0));
+                    view_shot(x.pos + x.facing * 9.0f + glm::vec3(-3, 3, 0), x.pos, arg(0));
                     log_info("crossing closed={} boom={:.0f} train running={} z={:.0f}", x.closed, x.boom, sim_->train().running, sim_->train().z);
                 }
             } else if (s.cmd == "pldir") {  // test: point the music-list editor at a folder of the game install
@@ -547,6 +548,10 @@ void App::run_script(double) {
 void App::screenshot(const std::string& name) {
     if (opt_.shotDir.empty()) return;
     Image full = r_->read_pixels(w_, h_);
+    if (full.rgba.size() < static_cast<std::size_t>(w_) * h_ * 4) {
+        log_error("screenshot {}: no frame to read", name);
+        return;
+    }
     Image img;
     img.w = vw_;
     img.h = vh_;
