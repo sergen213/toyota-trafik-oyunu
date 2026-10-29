@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.7 — 2026-10-28
 
 - Launcher: new Updates tab. It checks the latest GitHub release at startup (checkbox, on by default) or on
   "Check for updates"; when newer, the AppImage downloads the release's `-x86_64.AppImage`, verifies it against its
