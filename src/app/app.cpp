@@ -103,6 +103,7 @@ bool App::init() {
         if (!r_) return false;
     }
     if (r_->ray_tracing_supported()) r_->set_ray_tracing(opt_.rayTracing);
+    r_->set_enhanced(opt_.enhanced);
     if (opt_.frameGen && opt_.fsr < 0) opt_.fsr = 1;
     if (r_->upscaler_supported()) r_->set_upscaler(opt_.fsr);
     else if (opt_.fsr >= 0) log_warn("FSR 3.1.4 needs the Vulkan renderer on a capable GPU; upscaling stays off");
@@ -243,6 +244,11 @@ void App::handle(const SDL_Event& e) {
                 const char* t = r_->frame_generation() ? "Kare üretimi açık" : "Kare üretimi kapalı";
                 log_info("{}", t);
                 if (sim_) sim_->rules().notice(t, sim_->wall());
+            } else if (e.key.key == SDLK_F7) {  // native extra: enhanced graphics on/off
+                opt_.enhanced = !opt_.enhanced;
+                r_->set_enhanced(opt_.enhanced);
+                log_info("enhanced graphics {}", opt_.enhanced ? "on" : "off");
+                if (sim_) sim_->rules().notice(opt_.enhanced ? "Gelişmiş grafikler açık" : "Gelişmiş grafikler kapalı", sim_->wall());
             } else if (e.key.key == SDLK_F9 && r_->ray_tracing_supported()) {  // native extra: ray-traced shadows on/off
                 r_->set_ray_tracing(!r_->ray_tracing());
                 log_info("ray-traced shadows {}", r_->ray_tracing() ? "on" : "off");

@@ -21,10 +21,14 @@ with two backends, selected at start (`--renderer auto|vulkan|gl`):
   presents an interpolated frame (with the current HUD) before every rendered one. FSR comes from the vendored
   FidelityFX SDK v1.1.4 subset (`third_party/FidelityFX-SDK`, MIT) and the `render/fsr.*` wrapper, both taken from
   the IKV Linux port; shaders are compiled by `tools/ffx_fsr3_blobs.py` with glslc.
-- **OpenGL 3.3 core** (`render/gl.cpp`): fallback when Vulkan is missing; same look without the extras.
+- **OpenGL 3.3 core** (`render/gl.cpp`): fallback when Vulkan is missing; same look without the Vulkan extras.
 
-Default output keeps the original look (no FSR, no frame generation); ray-traced shadows are on when supported and
-can be switched off with `--no-rt`.
+Both backends share `render/shaders/water.glsl` (animated sea) and `render/shaders/enhanced.glsl` (enhanced graphics,
+F7 / `--no-enhanced`: a raymarched cloud layer composited in the sky pass, and parallax occlusion mapping on the
+surfaces `Renderer::upload` tags with `GpuMesh::Draw::relief`); the OpenGL backend embeds them as generated strings.
+
+Default output keeps the original look (no FSR, no frame generation) except for the enhanced graphics; ray-traced
+shadows are on when supported and can be switched off with `--no-rt`.
 
 ```
 src/core      fs (case-insensitive Windows paths, CP1254), log

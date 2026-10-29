@@ -68,7 +68,8 @@ offending cars or pedestrians), `c`/`v` signals, `h` horn, `k`/`l`/`o` camera, `
 `t`/`y` take over the car ahead / back to Afacan, F1–F4, ESC. F11 toggles fullscreen.
 
 Native extras (not in the original, off by default unless noted): ray-traced shadows (on when supported, `--no-rt`,
-F9), AMD FSR 3.1.4 upscaling (`--fsr native|quality|balanced|performance|ultra`, F10 cycles) and FSR 3.1.4 frame
-generation (`--framegen`, F8). `--renderer gl` forces the OpenGL fallback.
+F9), enhanced graphics — volumetric clouds and parallax relief on road, wall and ground textures (on, both renderers,
+`--no-enhanced`, F7), AMD FSR 3.1.4 upscaling (`--fsr native|quality|balanced|performance|ultra`, F10 cycles) and
+FSR 3.1.4 frame generation (`--framegen`, F8). `--renderer gl` forces the OpenGL fallback.
 
 Documentation: `docs/BUILDING.md`, `docs/TESTING.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/LEGAL.md`.

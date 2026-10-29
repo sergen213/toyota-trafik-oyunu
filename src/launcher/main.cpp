@@ -82,6 +82,7 @@ public:
         fsr_ = combo({{"Off", "off"}, {"Native AA", "native"}, {"Quality", "quality"}, {"Balanced", "balanced"},
                       {"Performance", "performance"}, {"Ultra performance", "ultra"}});
         framegen_ = new QCheckBox("FSR frame generation (Vulkan)");
+        enhanced_ = new QCheckBox("Enhanced graphics: volumetric clouds, parallax relief (not in the original)");
         mute_ = new QCheckBox("Mute audio");
         auto* gfxBox = new QGroupBox("Display and graphics");
         auto* form = new QFormLayout(gfxBox);
@@ -91,6 +92,7 @@ public:
         form->addRow("AMD FSR 3.1 upscaling", fsr_);
         form->addRow(rt_);
         form->addRow(framegen_);
+        form->addRow(enhanced_);
         form->addRow(mute_);
 
         play_ = new QPushButton("Play");
@@ -153,6 +155,7 @@ private:
         rt_->setChecked(s.value("rayTracing", true).toBool());
         select(fsr_, s.value("fsr", "off").toString());
         framegen_->setChecked(s.value("frameGeneration", false).toBool());
+        enhanced_->setChecked(s.value("enhanced", true).toBool());
         mute_->setChecked(s.value("mute", false).toBool());
         updateEnabled();
         if (!dir.isEmpty()) setGameDir(dir);
@@ -168,6 +171,7 @@ private:
         s.setValue("rayTracing", rt_->isChecked());
         s.setValue("fsr", fsr_->currentData());
         s.setValue("frameGeneration", framegen_->isChecked());
+        s.setValue("enhanced", enhanced_->isChecked());
         s.setValue("mute", mute_->isChecked());
     }
 
@@ -203,6 +207,7 @@ private:
             if (fsr_->currentData() != "off") a << "--fsr" << fsr_->currentData().toString();
             if (framegen_->isChecked()) a << "--framegen";
         }
+        if (!enhanced_->isChecked()) a << "--no-enhanced";
         if (mute_->isChecked()) a << "--mute";
         run(Job::Play, a, "Running…");
         hide();
@@ -255,7 +260,7 @@ private:
     QLineEdit* dir_;
     QLabel* gameStatus_;
     QComboBox *mode_, *size_, *renderer_, *fsr_;
-    QCheckBox *rt_, *framegen_, *mute_;
+    QCheckBox *rt_, *framegen_, *enhanced_, *mute_;
     QPushButton* play_;
     QPlainTextEdit* log_;
     QProcess proc_;

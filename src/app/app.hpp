@@ -39,6 +39,7 @@ struct Options {
     bool rayTracing = true;          // Vulkan ray-query shadows when supported
     int fsr = -1;                    // AMD FSR 3.1.4 quality (-1 off, 0 native AA .. 4 ultra performance)
     bool frameGen = false;           // FSR 3.1.4 frame generation (needs fsr >= 0)
+    bool enhanced = true;            // native extra: volumetric clouds + parallax relief (off = original look)
     int width = 1024, height = 768;
     unsigned seed = 0;  // 0 = random
 };

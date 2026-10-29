@@ -5,6 +5,11 @@
 - Wheels match the original (checked against the game under Wine and its setup at 0x53fc55): left tyres take a 180°
   roll about the forward axis, right tyres none — proper rotations instead of the old yaw + mirror pair, which made
   every tyre roll backwards. Steered front wheels also turned the wrong way (ODE's hinge2 Angle1 is the negated yaw).
+- Enhanced graphics (an addition, not original behaviour; on by default, `--no-enhanced`, F7 or the launcher
+  checkbox turn it off for the exact original look), on both renderers: a raymarched volumetric cloud layer
+  (350–950 m, sun-lit with Beer-Lambert extinction and a forward-scattering lobe, drifting with the wind) over the
+  skybox, and parallax occlusion mapping with self-shadowing on asphalt, kerbs, pavements, brick, stone, roof-tile
+  and dirt textures (height from texture luminance, tangent frame from screen derivatives, fading out by 40 m).
 
 ## 0.2.5 — 2026-10-28
 

@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -1337,7 +1338,7 @@ void VkRenderer::draw_sky(const std::array<const Texture*, 6>& faces) {
         c.count = 6;
         c.push.model = model;
         c.push.prevModel = model;
-        c.push.params = {faces[static_cast<std::size_t>(i)] ? faces[static_cast<std::size_t>(i)]->id : white_.id, 1u | 2u, cam, 0};
+        c.push.params = {faces[static_cast<std::size_t>(i)] ? faces[static_cast<std::size_t>(i)]->id : white_.id, 1u | 2u | (enhanced_ ? 16u : 0u), cam, 0};
         cmds_.push_back(c);
     }
 }
@@ -1364,7 +1365,9 @@ void VkRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& 
         const glm::vec3 col = (d.tintable || o.forceTint) && o.tint ? *o.tint : d.color;
         c.push.color = glm::vec4(col, a);
         c.push.uvx = o.uv;
-        c.push.params = {d.tex ? d.tex->id : white_.id, (o.unlit ? 1u : 0u) | (rtOn_ ? 4u : 0u) | (d.water && !o.unlit ? 8u : 0u), cam, 0};
+        const float relief = enhanced_ && !o.unlit && a >= 0.999f ? d.relief : 0.0f;
+        c.push.params = {d.tex ? d.tex->id : white_.id, (o.unlit ? 1u : 0u) | (rtOn_ ? 4u : 0u) | (d.water && !o.unlit ? 8u : 0u), cam,
+                         std::bit_cast<std::uint32_t>(relief)};
         cmds_.push_back(c);
     }
     if (rtOn_ && o.castShadow && !o.unlit && it->second.blas.addr) instances_.push_back({model, it->second.blas.addr});

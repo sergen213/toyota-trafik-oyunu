@@ -481,14 +481,14 @@ void Scene::update_camera(Sim& sim, double) {
 void Scene::draw(Sim& sim, int w, int h, std::optional<int> arrowSign, bool talking) {
     r_.begin_frame(w, h, {0.55f, 0.7f, 0.9f});
     r_.set_camera(view_, proj(w, h));
-    r_.draw_sky(sky_);
     // GLScene default light: two TGLLightSource at (+-700, 700, -+700) (0x52c7ec).
     Light l;
     l.dir = glm::normalize(glm::vec3(0.4f, -1.0f, -0.3f));
     l.ambient = glm::vec3(0.55f);
     l.diffuse = glm::vec3(0.55f);
     r_.set_light(l);
-    r_.set_time(static_cast<float>(std::fmod(sim.wall(), 3600.0)));  // water animation; wrapped to keep float precision
+    r_.set_time(static_cast<float>(std::fmod(sim.wall(), 3600.0)));  // water/cloud animation; wrapped to keep float precision
+    r_.draw_sky(sky_);  // after light and clock: the enhanced cloud layer is lit and wind-animated
     for (const auto& [m, t] : scenery_) r_.draw(m, t);
     const double now = sim.wall();
     // Traffic lights: three lamba.3ds per head (0x53b3e0), lit = emissive colour.

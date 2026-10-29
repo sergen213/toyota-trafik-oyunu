@@ -6,6 +6,7 @@ layout(set = 0, binding = 2) uniform accelerationStructureEXT tlas;
 #endif
 #include "common.glsl"
 #include "water.glsl"
+#include "enhanced.glsl"
 layout(set = 0, binding = 0) uniform sampler2D tex[];
 layout(location = 0) in vec3 vNrm;
 layout(location = 1) in vec2 vUv;
@@ -19,10 +20,20 @@ layout(location = 1) out vec2 oMotion;  // previousUV - UV (FSR 3 low-res, unjit
 #endif
 void main() {
     Cam c = cams[pc.params.z];
-    vec4 t = texture(tex[nonuniformEXT(pc.params.x)], vUv);
+    uint flags = pc.params.y;
+    float relief = uintBitsToFloat(pc.params.w);  // enhanced graphics: parallax depth (0 = off)
+    vec3 n = normalize(vNrm);
+    vec4 t;
+    float sh = 1.0;  // relief self-shadowing
+    if (relief != 0.0) {
+        vec3 eye = -transpose(mat3(c.view)) * c.view[3].xyz;
+        vec2 uv = eg_parallax(tex[pc.params.x], vUv, vWorld, eye, relief, vDist, -normalize(c.lightDir.xyz), n, sh);
+        t = textureGrad(tex[nonuniformEXT(pc.params.x)], uv, dFdx(vUv), dFdy(vUv));
+    } else {
+        t = texture(tex[nonuniformEXT(pc.params.x)], vUv);
+    }
     if (t.a < 0.5) discard;
     vec3 col = t.rgb * pc.color.rgb;
-    uint flags = pc.params.y;
     if ((flags & 8u) != 0u) {
         // Sea surface; Cam.fogRange.z carries the animation clock.
         float tm = c.fogRange.z;
@@ -45,7 +56,6 @@ void main() {
 #endif
         col = water_shade(b0, b1, vWorld, eye, L, c.amb.rgb, c.dif.rgb, horizon, tm, vDist, occl);
     } else if ((flags & 1u) == 0u) {
-        vec3 n = normalize(vNrm);
         vec3 L = -normalize(c.lightDir.xyz);
         float d = abs(dot(n, L));  // GLScene materials light both faces
         float lit = 1.0;
@@ -60,7 +70,15 @@ void main() {
             if (rayQueryGetIntersectionTypeEXT(q, true) != gl_RayQueryCommittedIntersectionNoneEXT) lit = 0.0;
         }
 #endif
-        col *= c.amb.rgb + c.dif.rgb * d * lit;
+        col *= c.amb.rgb + c.dif.rgb * d * lit * sh;
+    }
+    if ((flags & 16u) != 0u) {
+        // Enhanced graphics sky pass: volumetric clouds over the skybox face; Cam.fogRange.z is the clock.
+        vec3 eye = -transpose(mat3(c.view)) * c.view[3].xyz;
+        vec3 horizon = c.fogColor.w > 0.5 ? c.fogColor.rgb : vec3(0.62, 0.75, 0.9);
+        vec4 cl = eg_clouds(eye, normalize(vWorld - eye), -normalize(c.lightDir.xyz), c.amb.rgb, c.dif.rgb, horizon,
+                            c.fogRange.z, gl_FragCoord.xy);
+        col = col * (1.0 - cl.a) + cl.rgb;
     }
     if (c.fogColor.w > 0.5 && (flags & 2u) == 0u) {
         float f = clamp((c.fogRange.y - vDist) / (c.fogRange.y - c.fogRange.x), 0.0, 1.0);

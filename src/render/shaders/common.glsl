@@ -15,6 +15,7 @@ layout(push_constant) uniform Push {
     vec4 color;
     vec4 uvx;      // 3D: uv offset/scale; 2D: uv rect
     vec4 rect;     // 2D: pixel rect
-    uvec4 params;  // x texture slot, y flags (1 unlit, 2 no fog, 4 ray shadows), z camera index
+    uvec4 params;  // x texture slot, y flags (1 unlit, 2 no fog, 4 ray shadows, 8 water, 16 clouds), z camera index,
+                   // w parallax depth (float bits, 0 = off)
     mat4 prevModel;  // last frame's model matrix (FSR motion vectors)
 } pc;

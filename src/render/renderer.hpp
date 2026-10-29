@@ -34,6 +34,7 @@ struct GpuMesh {
         float alpha = 1.0f;
         bool tintable = false;  // true for SMD "null.bmp" body faces (vehicle paint) or chosen cloth textures
         bool water = false;     // "deniz.jpg" sea surface: animated water shading
+        float relief = 0.0f;    // enhanced graphics: parallax depth in texels, height from luminance (< 0: dark = high)
         std::string texName;    // lower-case texture file name from the source mesh
     };
     std::uint32_t handle = 0;  // 0 = empty
@@ -96,7 +97,11 @@ public:
     void set_camera(const glm::mat4& view, const glm::mat4& proj) { view_ = view; proj_ = proj; }
     void set_light(const Light& l) { light_ = l; }
     void set_fog(const Fog& f) { fog_ = f; }
-    void set_time(float seconds) { time_ = seconds; }  // animation clock for water
+    void set_time(float seconds) { time_ = seconds; }  // animation clock for water and clouds
+    // Native extra (not in the original): volumetric clouds over the skybox and parallax relief on
+    // Draw::relief surfaces. Off renders exactly the original look.
+    void set_enhanced(bool on) { enhanced_ = on; }
+    bool enhanced() const { return enhanced_; }
     // Skybox: six textures in order +X(Dogu) -X(Bati) +Y(Ust) -Y(Alt) +Z(Guney) -Z(Kuzey).
     virtual void draw_sky(const std::array<const Texture*, 6>& faces) = 0;
     virtual void draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& o) = 0;
@@ -139,6 +144,7 @@ protected:
     Light light_;
     Fog fog_;
     float time_ = 0.0f;
+    bool enhanced_ = true;
     std::unordered_map<std::string, Texture> cache_;
 };
 

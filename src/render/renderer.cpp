@@ -36,6 +36,21 @@ std::string lower(std::string s) {
     for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return s;
 }
+
+// Enhanced graphics: parallax depth, in texels of the texture, for surfaces whose texture reads as relief (the
+// map textures are stretched over very different world sizes, so metres would vanish on some and explode on
+// others). Height comes from luminance; negative = dark is high (bricks: the light mortar sits back).
+float relief_depth(const std::string& tex) {
+    static const std::pair<const char*, float> kRelief[] = {
+        {"asphalt.jpg", 1.5f}, {"asphalt2.jpg", 1.5f}, {"asphalt3.jpg", 1.5f}, {"yaya.jpg", 1.0f},
+        {"kal2.jpg", 1.5f},    {"kal_tas.jpg", 1.5f},  {"tren_yol.jpg", 2.0f}, {"dirt.jpg", 2.0f},
+        {"tas.jpg", 2.0f},     {"kaya.jpg", 3.0f},     {"kiremit.jpg", 2.0f},  {"tugla.jpg", -2.0f},
+        {"tugla2.jpg", -2.0f},
+    };
+    for (const auto& [n, d] : kRelief)
+        if (tex == n) return d;
+    return 0.0f;
+}
 }  // namespace
 
 GpuMesh Renderer::upload(const Mesh& m, const glm::mat4& bake, const TextureResolver& res) { return upload_frames({m}, bake, res); }
@@ -64,6 +79,7 @@ GpuMesh Renderer::upload_frames(const std::vector<Mesh>& frames, const glm::mat4
                         if (auto p = res(mat.texture)) {
                             d.tex = texture(*p);
                             d.color = glm::vec3(1.0f);  // GLScene modulates texture with white
+                            if (!d.tex->hasAlpha && d.alpha >= 0.999f) d.relief = relief_depth(d.texName);
                         } else {
                             log_warn("texture not found: {}", mat.texture);
                         }

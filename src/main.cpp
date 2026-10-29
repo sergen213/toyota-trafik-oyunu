@@ -29,6 +29,7 @@ void usage() {
         "  --no-rt          disable Vulkan ray-traced shadows\n"
         "  --fsr <q>        AMD FSR 3.1.4 upscaling (Vulkan): off, native, quality, balanced, performance, ultra\n"
         "  --framegen       FSR 3.1.4 frame generation (implies --fsr quality when FSR is off)\n"
+        "  --no-enhanced    original look: no volumetric clouds or parallax relief (F7 toggles)\n"
         "  --script <file>  run an automated input script (tests), --shots <dir> for its screenshots\n"
         "  --fixed-step     simulate 1/60 s per frame (deterministic tests)\n"
         "  --seed <n>       random seed\n"
@@ -164,6 +165,7 @@ int main(int argc, char** argv) {
         else if (a == "--mute") o.mute = true;
         else if (a == "--renderer") o.renderer = next();
         else if (a == "--no-rt") o.rayTracing = false;
+        else if (a == "--no-enhanced") o.enhanced = false;
         else if (a == "--fsr") {
             static const char* q[] = {"native", "quality", "balanced", "performance", "ultra"};
             const std::string v = next();

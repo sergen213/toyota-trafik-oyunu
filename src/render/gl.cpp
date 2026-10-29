@@ -7,6 +7,7 @@
 
 #include "core/log.hpp"
 #include "water_glsl.h"
+#include "enhanced_glsl.h"
 
 namespace tto {
 namespace {
@@ -29,7 +30,7 @@ void main() {
   gl_Position = uProj * e;
 })";
 
-// Fragment shader = head + shared water function (water.glsl) + main.
+// Fragment shader = head + shared water and enhanced-graphics functions (water.glsl, enhanced.glsl) + main.
 const char* kFs3dHead = R"(#version 330 core
 in vec3 vNrm; in vec2 vUv; in float vDist; in vec3 vWorld;
 uniform sampler2D uTex;
@@ -38,6 +39,7 @@ uniform vec3 uLightDir, uAmb, uDif;
 uniform int uUnlit;
 uniform int uFog; uniform vec3 uFogColor; uniform vec2 uFogRange;
 uniform int uWater; uniform float uTime; uniform mat4 uView;
+uniform int uClouds; uniform float uRelief; uniform vec3 uEye;
 out vec4 oColor;
 )";
 const char* kFs3dMain = R"(
@@ -51,12 +53,20 @@ void main() {
     oColor = vec4(c, uColor.a);
     return;
   }
-  vec4 t = texture(uTex, vUv);
+  vec3 n = normalize(vNrm);
+  vec4 t;
+  float sh = 1.0;  // relief self-shadowing
+  if (uRelief != 0.0) t = textureGrad(uTex, eg_parallax(uTex, vUv, vWorld, uEye, uRelief, vDist, -uLightDir, n, sh), dFdx(vUv), dFdy(vUv));
+  else t = texture(uTex, vUv);
   if (t.a < 0.5) discard;
   vec3 c = t.rgb * uColor.rgb;
   if (uUnlit == 0) {
-    float d = abs(dot(normalize(vNrm), -uLightDir));  // GLScene materials light both faces
-    c *= uAmb + uDif * d;
+    float d = abs(dot(n, -uLightDir));  // GLScene materials light both faces
+    c *= uAmb + uDif * d * sh;
+  }
+  if (uClouds != 0) {  // sky pass: vWorld is the view direction (view without translation)
+    vec4 cl = eg_clouds(uEye, normalize(vWorld), -uLightDir, uAmb, uDif, vec3(0.62, 0.75, 0.9), uTime, gl_FragCoord.xy);
+    c = c * (1.0 - cl.a) + cl.rgb;
   }
   if (uFog != 0) {
     float f = clamp((uFogRange.y - vDist) / (uFogRange.y - uFogRange.x), 0.0, 1.0);
@@ -175,7 +185,7 @@ bool GlRenderer::init() {
         return false;
     }
     glGetError();  // GLEW on core profiles leaves GL_INVALID_ENUM
-    prog3d_ = link(kVs3d, (std::string(kFs3dHead) + kWaterGlsl + kFs3dMain).c_str());
+    prog3d_ = link(kVs3d, (std::string(kFs3dHead) + kWaterGlsl + kEnhancedGlsl + kFs3dMain).c_str());
     prog2d_ = link(kVs2d, kFs2d);
     if (!prog3d_ || !prog2d_) return false;
     const float q[] = {0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1};
@@ -322,6 +332,8 @@ void GlRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& 
     glUniform4fv(U(prog3d_, "uUvX"), 1, glm::value_ptr(o.uv));
     glUniform1i(U(prog3d_, "uTex"), 0);
     glUniform1f(U(prog3d_, "uTime"), time_);
+    glUniform1i(U(prog3d_, "uClouds"), 0);
+    glUniform3fv(U(prog3d_, "uEye"), 1, glm::value_ptr(glm::vec3(glm::inverse(view_)[3])));
     glActiveTexture(GL_TEXTURE0);
     glBindVertexArray(it->second.vao);
     const GLint base = static_cast<GLint>(m.frameVerts) * std::clamp(o.frame, 0, m.frames - 1);
@@ -336,6 +348,7 @@ void GlRenderer::draw(const GpuMesh& m, const glm::mat4& model, const DrawOpts& 
         const glm::vec3 c = (d.tintable || o.forceTint) && o.tint ? *o.tint : d.color;
         glUniform4f(U(prog3d_, "uColor"), c.r, c.g, c.b, a);
         glUniform1i(U(prog3d_, "uWater"), d.water && !o.unlit ? 1 : 0);
+        glUniform1f(U(prog3d_, "uRelief"), enhanced_ && !o.unlit && a >= 0.999f ? d.relief : 0.0f);
         glDrawArrays(GL_TRIANGLES, base + static_cast<GLint>(d.first), static_cast<GLsizei>(d.count));
         if (a < 0.999f) {
             glDisable(GL_BLEND);
@@ -356,6 +369,13 @@ void GlRenderer::draw_sky(const std::array<const Texture*, 6>& faces) {
     glUniform1i(U(prog3d_, "uUnlit"), 1);
     glUniform1i(U(prog3d_, "uFog"), 0);
     glUniform1i(U(prog3d_, "uWater"), 0);
+    glUniform1f(U(prog3d_, "uRelief"), 0.0f);
+    glUniform1i(U(prog3d_, "uClouds"), enhanced_ ? 1 : 0);
+    glUniform3fv(U(prog3d_, "uEye"), 1, glm::value_ptr(glm::vec3(glm::inverse(view_)[3])));
+    glUniform3fv(U(prog3d_, "uLightDir"), 1, glm::value_ptr(glm::normalize(light_.dir)));
+    glUniform3fv(U(prog3d_, "uAmb"), 1, glm::value_ptr(light_.ambient));
+    glUniform3fv(U(prog3d_, "uDif"), 1, glm::value_ptr(light_.diffuse));
+    glUniform1f(U(prog3d_, "uTime"), time_);
     glUniform4f(U(prog3d_, "uColor"), 1, 1, 1, 1);
     glUniform4f(U(prog3d_, "uUvX"), 0, 0, 1, 1);
     glDepthMask(GL_FALSE);
