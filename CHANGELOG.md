@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Launcher: new Updates tab. It checks the latest GitHub release at startup (checkbox, on by default) or on
+  "Check for updates"; when newer, the AppImage downloads the release's `-x86_64.AppImage`, verifies it against its
+  `.sha256`, replaces itself in place and restarts. Non-AppImage builds only report the new version with a link.
+
 ## 0.2.6 — 2026-10-28
 
 - Wheels match the original (checked against the game under Wine and its setup at 0x53fc55): left tyres take a 180°

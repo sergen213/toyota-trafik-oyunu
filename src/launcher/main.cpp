@@ -1,6 +1,19 @@
 // toyota-trafik-launcher: picks the game folder (or imports the setup CD / .rar), sets the display and graphics
 // options, and starts toyota-trafik with them. It only builds a command line; the game validates and imports.
+// The Updates tab replaces the running AppImage with the latest GitHub release (sha256-checked) and restarts.
 #include <QApplication>
+#include <QCryptographicHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QProgressBar>
+#include <QTabWidget>
+#include <QVersionNumber>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
@@ -103,12 +116,18 @@ public:
         log_->setMaximumBlockCount(500);
         log_->setMaximumHeight(120);
 
+        auto* playTab = new QWidget;
+        auto* pl = new QVBoxLayout(playTab);
+        pl->addWidget(gameBox);
+        pl->addWidget(gfxBox);
+        pl->addWidget(play_);
+        auto* tabs = new QTabWidget;
+        tabs->addTab(playTab, "Play");
+        tabs->addTab(updatesTab(), "Updates");
         auto* layout = new QVBoxLayout(this);
-        layout->addWidget(gameBox);
-        layout->addWidget(gfxBox);
-        layout->addWidget(play_);
+        layout->addWidget(tabs);
         layout->addWidget(log_);
-        resize(620, 520);
+        resize(620, 560);
 
         load();
         connect(browse, &QPushButton::clicked, this, [this] {
@@ -137,10 +156,167 @@ public:
             gameStatus_->setText("toyota-trafik was not found next to the launcher or on PATH.");
             play_->setEnabled(false);
         }
+        if (autoUpdate_->isChecked()) checkUpdates(true);
     }
 
 private:
     enum class Job { None, Check, Import, Play };
+
+    static constexpr auto kLatest = "https://api.github.com/repos/sergen213/toyota-trafik-oyunu/releases/latest";
+    static constexpr auto kReleases = "https://github.com/sergen213/toyota-trafik-oyunu/releases/latest";
+
+    QWidget* updatesTab() {
+        auto* w = new QWidget;
+        auto* v = new QVBoxLayout(w);
+        v->addWidget(new QLabel("Installed version: " TTO_VERSION));
+        autoUpdate_ = new QCheckBox("Update automatically when the launcher starts");
+        autoUpdate_->setChecked(QSettings().value("autoUpdate", true).toBool());
+        connect(autoUpdate_, &QCheckBox::toggled, this, [](bool on) { QSettings().setValue("autoUpdate", on); });
+        v->addWidget(autoUpdate_);
+        updateStatus_ = new QLabel(appImage().isEmpty()
+            ? QString("Updates install only into the AppImage; other builds can check, then download from <a href=\"%1\">%1</a>.").arg(kReleases)
+            : "Press “Check for updates”.");
+        updateStatus_->setWordWrap(true);
+        updateStatus_->setOpenExternalLinks(true);
+        v->addWidget(updateStatus_);
+        progress_ = new QProgressBar;
+        progress_->hide();
+        v->addWidget(progress_);
+        auto* row = new QHBoxLayout;
+        auto* check = new QPushButton("Check for updates");
+        apply_ = new QPushButton("Update and restart");
+        apply_->setEnabled(false);
+        row->addWidget(check);
+        row->addWidget(apply_);
+        row->addStretch();
+        v->addLayout(row);
+        v->addStretch();
+        connect(check, &QPushButton::clicked, this, [this] { checkUpdates(false); });
+        connect(apply_, &QPushButton::clicked, this, [this] { downloadUpdate(); });
+        return w;
+    }
+
+    // The AppImage runtime exports APPIMAGE (the .AppImage file itself); only that file can be replaced in place.
+    static QString appImage() { return qEnvironmentVariable("APPIMAGE"); }
+
+    // GET the latest release; when newer, remember its AppImage and .sha256 assets (and install them if automatic).
+    void checkUpdates(bool automatic) {
+        updateStatus_->setText("Checking for updates…");
+        auto* r = net_.get(QNetworkRequest(QUrl(qEnvironmentVariable("TTO_UPDATE_URL", kLatest))));
+        connect(r, &QNetworkReply::finished, this, [this, r, automatic] {
+            r->deleteLater();
+            const auto rel = QJsonDocument::fromJson(r->readAll()).object();
+            const QString tag = rel["tag_name"].toString();
+            if (r->error() != QNetworkReply::NoError || tag.isEmpty()) {
+                updateStatus_->setText("Update check failed: " + r->errorString());
+                return;
+            }
+            const auto latest = QVersionNumber::fromString(tag.startsWith('v') ? tag.mid(1) : tag);
+            if (latest <= QVersionNumber::fromString(TTO_VERSION)) {
+                updateStatus_->setText(QString("Up to date (latest release %1).").arg(tag));
+                return;
+            }
+            assetUrl_.clear();
+            QUrl sumUrl;
+            for (const auto& a : rel["assets"].toArray()) {
+                const QString n = a.toObject()["name"].toString();
+                const QUrl u(a.toObject()["browser_download_url"].toString());
+                if (n.endsWith("-x86_64.AppImage")) assetName_ = n, assetUrl_ = u;
+                else if (n.endsWith("-x86_64.AppImage.sha256")) sumUrl = u;
+            }
+            if (assetUrl_.isEmpty() || sumUrl.isEmpty()) {
+                updateStatus_->setText(QString("%1 is available but has no AppImage with a .sha256: <a href=\"%2\">%2</a>").arg(tag, kReleases));
+                return;
+            }
+            if (appImage().isEmpty()) {
+                updateStatus_->setText(QString("%1 is available: <a href=\"%2\">%2</a>").arg(tag, kReleases));
+                return;
+            }
+            updateStatus_->setText(QString("%1 is available.").arg(tag));
+            // The checksum file is "<hex>  <name>"; fetch it first so the download can be verified as it streams.
+            auto* s = net_.get(QNetworkRequest(sumUrl));
+            connect(s, &QNetworkReply::finished, this, [this, s, automatic] {
+                s->deleteLater();
+                expectedSum_ = QString::fromUtf8(s->readAll()).section(' ', 0, 0).trimmed().toLower();
+                if (s->error() != QNetworkReply::NoError || expectedSum_.size() != 64) {
+                    updateStatus_->setText("Could not read the release checksum: " + s->errorString());
+                    return;
+                }
+                apply_->setEnabled(true);
+                if (automatic && proc_.state() == QProcess::NotRunning) downloadUpdate();
+            });
+        });
+    }
+
+    // Download next to the AppImage (same filesystem, so the final rename is atomic), verify, swap, restart.
+    void downloadUpdate() {
+        apply_->setEnabled(false);
+        const QString target = appImage();
+        auto* file = new QFile(target + ".part", this);
+        if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            updateStatus_->setText("Cannot write " + file->fileName() + ": " + file->errorString());
+            delete file;
+            return;
+        }
+        auto* hash = new QCryptographicHash(QCryptographicHash::Sha256);
+        updateStatus_->setText("Downloading " + assetName_ + "…");
+        progress_->setValue(0);
+        progress_->show();
+        auto* r = net_.get(QNetworkRequest(assetUrl_));
+        connect(r, &QNetworkReply::downloadProgress, this, [this](qint64 got, qint64 total) {
+            progress_->setMaximum(total > 0 ? int(total / 1024) : 0);
+            progress_->setValue(int(got / 1024));
+        });
+        connect(r, &QNetworkReply::readyRead, this, [r, file, hash] {
+            const QByteArray b = r->readAll();
+            hash->addData(b);
+            file->write(b);
+        });
+        connect(r, &QNetworkReply::finished, this, [this, r, file, hash, target] {
+            r->deleteLater();
+            const QByteArray rest = r->readAll();
+            hash->addData(rest);
+            file->write(rest);
+            const bool written = file->flush() && file->error() == QFileDevice::NoError;
+            file->close();
+            const QString got = QString::fromLatin1(hash->result().toHex());
+            delete hash;
+            progress_->hide();
+            QString err;
+            if (r->error() != QNetworkReply::NoError) err = "Download failed: " + r->errorString();
+            else if (!written) err = "Writing the update failed: " + file->errorString();
+            else if (got != expectedSum_) err = "Checksum mismatch; the download was discarded.";
+            else if (!file->setPermissions(QFileInfo(target).permissions() | QFile::ExeOwner | QFile::ReadOwner))
+                err = "Cannot make the update executable.";
+            // rename(2) over the running AppImage is safe: the mounted runtime keeps the old inode open.
+            else if (std::rename(file->fileName().toLocal8Bit().constData(), target.toLocal8Bit().constData()) != 0)
+                err = "Cannot replace " + target + ": " + QString::fromLocal8Bit(std::strerror(errno));
+            if (!err.isEmpty()) {
+                file->remove();
+                file->deleteLater();
+                updateStatus_->setText(err);
+                apply_->setEnabled(true);
+                return;
+            }
+            file->deleteLater();
+            log_->appendPlainText("Updated " + target + " to " + assetName_ + "; restarting.");
+            restart(target);
+        });
+    }
+
+    // Start the new AppImage without this one's mount paths in its environment, then leave.
+    void restart(const QString& target) {
+        QProcess p;
+        auto env = QProcessEnvironment::systemEnvironment();
+        for (const char* k : {"LD_LIBRARY_PATH", "QT_PLUGIN_PATH", "APPDIR", "APPIMAGE", "ARGV0", "OWD"}) env.remove(k);
+        p.setProcessEnvironment(env);
+        p.setProgram(target);
+        if (!p.startDetached()) {
+            updateStatus_->setText("Updated; restart the launcher to use the new version.");
+            return;
+        }
+        QCoreApplication::quit();
+    }
 
     void load() {
         QSettings s;
@@ -252,7 +428,8 @@ private:
     void setBusy(bool b) {
         play_->setEnabled(!b && !exe_.isEmpty());
         for (auto* w : findChildren<QPushButton*>())
-            if (w != play_) w->setEnabled(!b);
+            if (w != play_ && w != apply_) w->setEnabled(!b);
+        apply_->setEnabled(!b && !assetUrl_.isEmpty() && !expectedSum_.isEmpty() && !appImage().isEmpty());
         dir_->setEnabled(!b);
     }
 
@@ -261,11 +438,17 @@ private:
     QLabel* gameStatus_;
     QComboBox *mode_, *size_, *renderer_, *fsr_;
     QCheckBox *rt_, *framegen_, *enhanced_, *mute_;
-    QPushButton* play_;
+    QPushButton *play_, *apply_;
     QPlainTextEdit* log_;
     QProcess proc_;
     Job job_ = Job::None;
     bool gameOk_ = false;
+    QNetworkAccessManager net_;
+    QCheckBox* autoUpdate_;
+    QLabel* updateStatus_;
+    QProgressBar* progress_;
+    QUrl assetUrl_;
+    QString assetName_, expectedSum_;
 };
 
 }  // namespace

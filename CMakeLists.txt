@@ -145,11 +145,16 @@ endif()
 
 # Qt 6 launcher (Linux): game folder / import, display and graphics options, then starts toyota-trafik.
 if(TTO_BUILD_GAME AND NOT WIN32)
-  find_package(Qt6 6.5 COMPONENTS Widgets)
+  find_package(Qt6 6.5 COMPONENTS Widgets Network)
   if(Qt6_FOUND)
     qt_standard_project_setup()
     qt_add_executable(toyota-trafik-launcher src/launcher/main.cpp)
-    target_link_libraries(toyota-trafik-launcher PRIVATE Qt6::Widgets)
+    target_link_libraries(toyota-trafik-launcher PRIVATE Qt6::Widgets Qt6::Network)
+    # The Updates tab compares this with the latest GitHub release (-DTTO_LAUNCHER_VERSION=0.0.1 to test updating).
+    if(NOT DEFINED TTO_LAUNCHER_VERSION)
+      set(TTO_LAUNCHER_VERSION ${PROJECT_VERSION})
+    endif()
+    target_compile_definitions(toyota-trafik-launcher PRIVATE TTO_VERSION="${TTO_LAUNCHER_VERSION}")
     install(TARGETS toyota-trafik-launcher RUNTIME DESTINATION bin)
   else()
     message(STATUS "Qt 6 Widgets not found: toyota-trafik-launcher is not built")

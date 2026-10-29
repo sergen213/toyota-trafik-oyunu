@@ -30,7 +30,8 @@ for f in platforms/libqwayland.so platforms/libqxcb.so platforms/libqoffscreen.s
          wayland-shell-integration/libxdg-shell.so wayland-decoration-client/libbradient.so \
          wayland-graphics-integration-client/libqt-plugin-wayland-egl.so xcbglintegrations/libqxcb-glx-integration.so \
          xcbglintegrations/libqxcb-egl-integration.so imageformats/libqsvg.so iconengines/libqsvgicon.so \
-         platforminputcontexts/libcomposeplatforminputcontextplugin.so platformthemes/libqxdgdesktopportal.so; do
+         platforminputcontexts/libcomposeplatforminputcontextplugin.so platformthemes/libqxdgdesktopportal.so \
+         tls/libqopensslbackend.so; do
   install -Dm755 "$QTP/$f" "AppDir/usr/lib/qt6/plugins/$f"
 done
 "$LINUXDEPLOY" --appdir AppDir --exclude-library "libvulkan.so*" -e AppDir/usr/bin/toyota-trafik -e AppDir/usr/bin/toyota-trafik-launcher \
