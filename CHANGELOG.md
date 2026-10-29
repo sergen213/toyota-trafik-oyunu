@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Wheels match the original (checked against the game under Wine and its setup at 0x53fc55): left tyres take a 180°
+  roll about the forward axis, right tyres none — proper rotations instead of the old yaw + mirror pair, which made
+  every tyre roll backwards. Steered front wheels also turned the wrong way (ODE's hinge2 Angle1 is the negated yaw).
+
 ## 0.2.5 — 2026-10-28
 
 - Launcher: the AppImage now opens a Qt 6 launcher (`toyota-trafik-launcher`) instead of starting the game straight

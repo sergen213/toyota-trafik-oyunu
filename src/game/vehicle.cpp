@@ -270,8 +270,10 @@ glm::mat4 OdeCar::wheel_transform(int i) const {
 }
 
 glm::vec2 OdeCar::wheel_angles(int i) const {
+    // Wheel attitude relative to the chassis: ODE's Angle1 runs opposite to the wheel body's yaw about +Y (steering
+    // left reads negative), Angle2 matches its spin about +X.
     dJointID j = joints_[static_cast<std::size_t>(i)];
-    return {static_cast<float>(dJointGetHinge2Angle1(j)), static_cast<float>(dJointGetHinge2Angle2(j))};
+    return {-static_cast<float>(dJointGetHinge2Angle1(j)), static_cast<float>(dJointGetHinge2Angle2(j))};
 }
 
 void OdeCar::set_enabled(bool on) {

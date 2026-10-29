@@ -288,7 +288,8 @@ void Scene::load_cars(std::mt19937& rng) {
         const std::string f = "Arabalar\\Teker\\Teker" + std::to_string(i + 1) + ".3ds";
         if (!fs_.find(f)) continue;
         try {
-            // Hub centred on the axle: the cylinder spans file x -34..-11 (axis along x).
+            // Hub centred on the axle (the cylinder spans file x -34..-11, axis along x): the original's freeform sits
+            // flush in the arches like this (Wine reference), not offset by the raw file coordinates.
             const glm::mat4 bake = glm::translate(glm::mat4(1), {0.2275f, 0, 0}) * zup_to_yup(0.01f);
             wheels_[static_cast<std::size_t>(i)] = load_mesh(f, bake, {"Arabalar\\Teker"});
         } catch (const std::exception& e) {
@@ -593,27 +594,23 @@ void Scene::draw(Sim& sim, int w, int h, std::optional<int> arrowSign, bool talk
             bo.tint = c.color;
             r_.draw(cm.body, B, ids(bo));
         }
-        // Wheels: Teker<n>.3ds on every ODE wheel body. The pancake's rim dish (M1.JPG) is the cap at file x=-31.1
-        // with normal -X, and bake maps file X -> car +X = car-LEFT, so raw it faces inboard on EVERY wheel: each
-        // copy gets a 180 deg yaw about its own centre (F) to put the dish outboard. The rotation is rebuilt from
-        // the hinge2 angles (yaw=steer about chassis Y, spin about axle X); the raw wheel-body quaternion carries
-        // free-axis wobble that made rear tyres visibly wiggle. Far-side wheels (car -X) pre-mirror the mesh:
-        // P*F*R*M — odd parity keeps the dish outboard there, yaw becomes -delta (mirrored steering), and the
-        // axle spin inside R rolls forward under the mirror. Conjugating by M is a proper map (no net mirror):
-        // it puts the TREAD plate outboard, which reads as frozen black tyres.
+        // Wheels: Teker<n>.3ds on every ODE wheel body, oriented as the original sets them up (0x53fc55..0x53fe7b):
+        // Direction (0,1,0), Up (0,-1,0) on WheelLF/LB and Up (0,1,0) on WheelRF/RB. GLScene resolves those to a 180 deg
+        // roll about the wheel's forward axis on the left (car +X) wheels and identity on the right. Proper rotations
+        // only: the rim dish (file x -31.1, facing -X) ends up outboard on both sides and the tyre rolls with the body
+        // (positive spin about +X = forward; the old yaw/mirror pair ran it backwards). The rotation is rebuilt from the
+        // hinge2 angles (yaw=steer about chassis Y, spin about axle X); the raw wheel-body quaternion carries free-axis
+        // wobble that made rear tyres visibly wiggle.
         if (const GpuMesh& wm = wheels_[static_cast<std::size_t>(cm.wheel)]; wm.handle && c.type != 16) {
             const glm::mat4 invT = glm::affineInverse(T);
             const glm::mat4 S = glm::scale(glm::mat4(1), glm::vec3(cm.wheelScale / 0.01f));
-            const glm::mat4 F = glm::rotate(glm::mat4(1), glm::pi<float>(), {0, 1, 0});
-            // GLM columns: M[0][0]=-1 gives diag(-1,1,1); negating all of M[0] shears x into y,z and breaks w.
-            glm::mat4 M(1.0f);
-            M[0][0] = -1.0f;
+            const glm::mat4 roll = glm::rotate(glm::mat4(1), glm::pi<float>(), {0, 0, 1});
             for (int i = 0; i < 4; ++i) {
                 const glm::vec3 cpos = glm::vec3(invT * c.body->wheel_transform(i)[3]);  // centre in car frame
                 const glm::vec2 a = c.body->wheel_angles(i);
                 glm::mat4 R = glm::rotate(glm::mat4(1), a.x, {0, 1, 0}) * glm::rotate(glm::mat4(1), a.y, {1, 0, 0});
-                if (cpos.x < 0) R = R * M;
-                r_.draw(wm, T * (glm::translate(glm::mat4(1), cpos) * F * R * S), ids({}));
+                if (cpos.x > 0) R = R * roll;
+                r_.draw(wm, T * (glm::translate(glm::mat4(1), cpos) * R * S), ids({}));
             }
         }
         auto lampAt = [&](const std::optional<GpuMesh>& m, glm::vec3 off) {
