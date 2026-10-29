@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.6 — 2026-10-28
 
 - Wheels match the original (checked against the game under Wine and its setup at 0x53fc55): left tyres take a 180°
   roll about the forward axis, right tyres none — proper rotations instead of the old yaw + mirror pair, which made

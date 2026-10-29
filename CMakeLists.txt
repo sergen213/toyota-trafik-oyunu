@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(ToyotaTrafikOyunuNative VERSION 0.2.5 LANGUAGES C CXX)
+project(ToyotaTrafikOyunuNative VERSION 0.2.6 LANGUAGES C CXX)
 
 # C++26 is technically complete in WG21 but ISO 14882:2026 is still a DIS
 # (see docs/ENVIRONMENT.md), so the project uses C++23.
