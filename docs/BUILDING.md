@@ -65,6 +65,10 @@ scripts/package_release.sh            # version from CMakeLists.txt; output in d
   The script bundles every imported DLL found in the prefix (failing on unknown ones), never the Vulkan loader or
   OpenGL, plus the licences of the bundled MSYS2 packages. Check under Wine:
   `wine toyota-trafik.exe --import 'Z:\…\setup.rar' --check`.
+- **Windows installer**: `packaging/windows/toyota-trafik.nsi`, compiled by MSYS2's `makensis.exe` under Wine (add
+  `mingw-w64-ucrt-x86_64-nsis` to the prefix). Per-user install into `%LOCALAPPDATA%\Programs\Toyota Trafik Oyunu`;
+  the uninstaller deletes exactly the installed files (generated list) and keeps `%APPDATA%\toyota-trafik`. Check:
+  `wine …-Setup.exe /S`, run the installed exe, then `wine …\uninstall.exe /S`.
 
 ## Running the original instead (reference / comparison)
 
@@ -73,7 +77,3 @@ scripts/wine_recover.sh setup "<game folder>" ~/tto-wine
 scripts/wine_recover.sh run ~/tto-wine
 ```
 
-- **Windows installer**: `packaging/windows/toyota-trafik.nsi`, compiled by MSYS2's `makensis.exe` under Wine (add
-  `mingw-w64-ucrt-x86_64-nsis` to the prefix). Per-user install into `%LOCALAPPDATA%\Programs\Toyota Trafik Oyunu`;
-  the uninstaller deletes exactly the installed files (generated list) and keeps `%APPDATA%\toyota-trafik`. Check:
-  `wine …-Setup.exe /S`, run the installed exe, then `wine …\uninstall.exe /S`.
