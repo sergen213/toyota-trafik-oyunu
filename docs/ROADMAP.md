@@ -1,6 +1,6 @@
 # Roadmap and progress
 
-Milestones from goal.txt §14. Evidence is in brackets.
+Evidence is in brackets.
 
 | # | Milestone | State |
 |---|---|---|

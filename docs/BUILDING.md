@@ -11,7 +11,7 @@ sudo pacman -S --needed base-devel cmake ninja git sdl3 sdl3_ttf glew glm mpg123
 
 ODE is not packaged with trimesh support on Arch. CMake therefore uses the system `ode` when pkg-config finds it,
 and otherwise builds the pinned source tarball `third_party/ode-0.16.6.tar.gz` (SHA-256 checked, BSD licence).
-No network access is needed. Versions used during development are listed in `ENVIRONMENT.md`.
+No network access is needed.
 
 ## Build
 

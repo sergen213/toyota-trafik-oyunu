@@ -1,6 +1,6 @@
 # Architecture and recovery strategy
 
-## Options considered (goal.txt §6)
+## Options considered
 
 | Option | Evidence | Verdict |
 |---|---|---|
